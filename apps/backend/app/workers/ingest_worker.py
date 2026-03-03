@@ -36,10 +36,23 @@ async def process_pending_jobs() -> None:
 
 
 async def run_worker(interval_seconds: int = 10) -> None:
-    """Background worker loop."""
+    """Background worker loop. Restarts automatically on unexpected errors."""
+    consecutive_errors = 0
     while True:
         try:
             await process_pending_jobs()
+            consecutive_errors = 0
+        except asyncio.CancelledError:
+            raise
         except Exception as exc:
-            logger.error("Worker error: %s", exc)
+            consecutive_errors += 1
+            wait = min(interval_seconds * consecutive_errors, 60)
+            logger.error(
+                "Worker error (attempt %d): %s. Retrying in %ds",
+                consecutive_errors,
+                exc,
+                wait,
+            )
+            await asyncio.sleep(wait)
+            continue
         await asyncio.sleep(interval_seconds)

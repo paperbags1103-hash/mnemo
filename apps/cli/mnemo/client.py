@@ -33,7 +33,7 @@ class MnemoClient:
     def search_notes(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
         response = httpx.get(
             f"{self.base_url}/api/v1/search",
-            params={"query": query},
+            params={"q": query, "limit": limit},
             timeout=10,
         )
         response.raise_for_status()

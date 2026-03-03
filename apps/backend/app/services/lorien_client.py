@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 import sys
 from pathlib import Path
 
 from app.core.config import settings
+
+_UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
+logger = logging.getLogger(__name__)
 
 
 class LorienClient:
@@ -27,8 +31,10 @@ class LorienClient:
             db_path = settings.resolved_lorien_db_path
             db_path.parent.mkdir(parents=True, exist_ok=True)
             self._memory = LorienMemory(str(db_path))
+            logger.info("lorien loaded from %s", db_path)
             return self._memory
-        except Exception:
+        except Exception as exc:
+            logger.warning("lorien unavailable: %s", exc)
             return None
 
     @staticmethod
@@ -74,6 +80,9 @@ class LorienClient:
 
     async def get_note_entities(self, note_id: str) -> list[dict]:
         """Get entities related to a note via source or source_ref."""
+        if not _UUID_RE.match(note_id):
+            return []
+
         safe_note_id = self._escape(note_id)
         rows = await self._run_query(
             "MATCH (e:Entity) "
@@ -101,6 +110,9 @@ class LorienClient:
 
     async def get_note_facts(self, note_id: str) -> list[dict]:
         """Get facts related to a note via source or source_ref."""
+        if not _UUID_RE.match(note_id):
+            return []
+
         safe_note_id = self._escape(note_id)
         rows = await self._run_query(
             "MATCH (f:Fact) "

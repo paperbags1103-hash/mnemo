@@ -22,6 +22,8 @@ class DatabaseManager:
     async def initialize(self) -> None:
         self.sqlite_path.parent.mkdir(parents=True, exist_ok=True)
         async with aiosqlite.connect(self.sqlite_path) as connection:
+            await connection.execute("PRAGMA journal_mode=WAL")
+            await connection.execute("PRAGMA synchronous=NORMAL")
             await connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS note (
@@ -61,6 +63,23 @@ class DatabaseManager:
                 FROM note
                 ORDER BY datetime(updated_at) DESC
                 """
+            )
+            rows = await cursor.fetchall()
+            return [self._row_to_note(row) for row in rows]
+
+    async def search_notes(self, query: str, limit: int = 10) -> list[NoteRead]:
+        pattern = f"%{query}%"
+        async with aiosqlite.connect(self.sqlite_path) as connection:
+            connection.row_factory = aiosqlite.Row
+            cursor = await connection.execute(
+                """
+                SELECT id, title, content, folder_id, created_at, updated_at, version
+                FROM note
+                WHERE title LIKE ? OR content LIKE ?
+                ORDER BY datetime(updated_at) DESC
+                LIMIT ?
+                """,
+                (pattern, pattern, limit),
             )
             rows = await cursor.fetchall()
             return [self._row_to_note(row) for row in rows]
