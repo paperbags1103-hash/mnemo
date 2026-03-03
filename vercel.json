@@ -11,10 +11,5 @@
     { "source": "/api/health", "destination": "/api/health?check=live" },
     { "source": "/health/:check", "destination": "/api/health?check=:check" },
     { "source": "/(.*)", "destination": "/index.html" }
-  ],
-  "functions": {
-    "api/**/*.py": {
-      "runtime": "python3.12"
-    }
-  }
+  ]
 }
