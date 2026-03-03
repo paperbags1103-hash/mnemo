@@ -14,9 +14,7 @@ MNEMO_API_KEY = os.environ.get("MNEMO_API_KEY", "")
 
 
 def _check_auth(headers) -> bool:
-    if not MNEMO_API_KEY:
-        return True
-    return headers.get("X-Api-Key") == MNEMO_API_KEY
+    return _check_auth_fn(headers)
 
 
 class handler(BaseHTTPRequestHandler):

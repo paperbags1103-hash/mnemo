@@ -7,15 +7,13 @@ _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 
-from _lib.config import MNEMO_API_KEY
+from _lib.auth import check_auth as _check_auth_fn
 from _lib.db import close_conn, delete_note, get_note, initialize, update_note
 from _lib.models import NoteUpdate
 
 
 def _check_auth(headers) -> bool:
-    if not MNEMO_API_KEY:
-        return True
-    return headers.get("X-Api-Key") == MNEMO_API_KEY
+    return _check_auth_fn(headers)
 
 
 class handler(BaseHTTPRequestHandler):

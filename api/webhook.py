@@ -6,7 +6,7 @@ import sys as _sys
 _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
 from http.server import BaseHTTPRequestHandler
 
-from _lib.config import MNEMO_API_KEY
+from _lib.auth import check_auth as _check_auth_fn
 from _lib.db import close_conn, create_note, initialize, upsert_note
 from _lib.models import NoteCreate
 
