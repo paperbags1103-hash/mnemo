@@ -8,6 +8,7 @@ import os
 from http.server import BaseHTTPRequestHandler
 
 from _lib.db import close_conn, initialize, list_notes
+from _lib.auth import check_auth as _check_auth_fn
 
 MNEMO_API_KEY = os.environ.get("MNEMO_API_KEY", "")
 

@@ -8,6 +8,7 @@ from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 
 from _lib.config import MNEMO_API_KEY, is_turso
+from _lib.auth import check_auth as _check_auth_fn
 
 
 def _check_auth(headers) -> bool:
