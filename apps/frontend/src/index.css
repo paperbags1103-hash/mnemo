@@ -1,0 +1,56 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 210 20% 10%;
+  --foreground: 210 17% 92%;
+  --card: 216 21% 13%;
+  --card-foreground: 210 17% 92%;
+  --primary: 194 95% 61%;
+  --primary-foreground: 210 20% 10%;
+  --muted: 216 16% 18%;
+  --muted-foreground: 212 12% 68%;
+  --accent: 41 90% 60%;
+  --accent-foreground: 210 20% 10%;
+  --border: 216 14% 22%;
+  --input: 216 14% 22%;
+  --ring: 194 95% 61%;
+}
+
+body {
+  @apply bg-background text-foreground font-sans antialiased;
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background-image:
+    radial-gradient(circle at top left, rgba(34, 211, 238, 0.12), transparent 28%),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.97), rgba(9, 12, 20, 1));
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.ProseMirror {
+  min-height: 50vh;
+  outline: none;
+  white-space: pre-wrap;
+}
+
+.ProseMirror p {
+  margin: 0.65rem 0;
+}
+
+.ProseMirror h1,
+.ProseMirror h2,
+.ProseMirror h3 {
+  margin: 1.1rem 0 0.6rem;
+}
+
+.ProseMirror ul,
+.ProseMirror ol {
+  padding-left: 1.2rem;
+}

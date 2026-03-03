@@ -1,0 +1,9 @@
+aiosqlite>=0.21.0
+fastapi>=0.115.11
+httpx>=0.28.1
+libsql-client>=0.3.1
+pydantic>=2.10.6
+pydantic-settings>=2.8.1
+python-dotenv>=1.0.1
+sqlmodel>=0.0.24
+uvicorn[standard]>=0.34.0
