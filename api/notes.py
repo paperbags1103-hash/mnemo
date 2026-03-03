@@ -29,12 +29,16 @@ class handler(BaseHTTPRequestHandler):
         if not _check_auth(self.headers):
             self._write_json(401, {"detail": "Invalid or missing API key"})
             return
-        conn = initialize()
         try:
-            notes = list_notes(conn)
-        finally:
-            close_conn(conn)
-        self._write_json(200, [note.model_dump(mode="json") for note in notes])
+            conn = initialize()
+            try:
+                notes = list_notes(conn)
+            finally:
+                close_conn(conn)
+            self._write_json(200, [note.model_dump(mode="json") for note in notes])
+        except Exception as exc:
+            import traceback
+            self._write_json(500, {"error": str(exc), "trace": traceback.format_exc()[-500:]})
 
     def do_POST(self):
         if not _check_auth(self.headers):
