@@ -313,32 +313,37 @@ class DatabaseManager:
             await connection.commit()
         return await self.get_job(job_id)
 
-    async def list_jobs(self, status: str | None = None, limit: int = 20) -> list[IngestJob]:
+    async def list_jobs(
+        self,
+        note_id: str | None = None,
+        status: str | None = None,
+        limit: int = 20,
+    ) -> list[IngestJob]:
         async with aiosqlite.connect(self.sqlite_path) as connection:
             connection.row_factory = aiosqlite.Row
+            conditions: list[str] = []
+            parameters: list[str | int] = []
+
+            if note_id:
+                conditions.append("note_id = ?")
+                parameters.append(note_id)
             if status:
-                cursor = await connection.execute(
-                    """
-                    SELECT id, note_id, status, retry_count, max_retries,
-                           next_retry_at, error, created_at, updated_at
-                    FROM ingest_job
-                    WHERE status = ?
-                    ORDER BY datetime(created_at) DESC
-                    LIMIT ?
-                    """,
-                    (status, limit),
-                )
-            else:
-                cursor = await connection.execute(
-                    """
-                    SELECT id, note_id, status, retry_count, max_retries,
-                           next_retry_at, error, created_at, updated_at
-                    FROM ingest_job
-                    ORDER BY datetime(created_at) DESC
-                    LIMIT ?
-                    """,
-                    (limit,),
-                )
+                conditions.append("status = ?")
+                parameters.append(status)
+
+            where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+            parameters.append(limit)
+            cursor = await connection.execute(
+                f"""
+                SELECT id, note_id, status, retry_count, max_retries,
+                       next_retry_at, error, created_at, updated_at
+                FROM ingest_job
+                {where_clause}
+                ORDER BY datetime(created_at) DESC
+                LIMIT ?
+                """,
+                parameters,
+            )
             rows = await cursor.fetchall()
             return [self._row_to_ingest_job(row) for row in rows]
 

@@ -10,10 +10,11 @@ router = APIRouter(prefix="/ingest", tags=["ingest"])
 
 @router.get("/jobs")
 async def list_ingest_jobs(
+    note_id: str | None = Query(default=None),
     status: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
 ) -> dict[str, list[IngestJob]]:
-    jobs = await db.list_jobs(status=status, limit=limit)
+    jobs = await db.list_jobs(note_id=note_id, status=status, limit=limit)
     return {"jobs": jobs}
 
 
