@@ -1,46 +1,67 @@
 # mnemo
 
-Monorepo skeleton for an Obsidian-style AI note workspace.
+mnemo — AI Agent's Obsidian. Knowledge management web app powered by lorien.
 
-## Structure
+## Architecture
 
-- `apps/frontend`: Vite + React + TypeScript + TipTap + shadcn-style UI
-- `apps/backend`: FastAPI + SQLModel with SQLite fallback and Turso readiness checks
+```txt
+Browser
+  |
+  v
+Vercel -> apps/frontend (Vite + React SPA)
+  |
+  v
+Fly.io -> apps/backend (FastAPI)
+  |
+  +--> Turso / libSQL
+  +--> SQLite fallback for local development
+  +--> lorien ingest + graph read integration
+```
 
-## Local development
+## Quick Start
 
 ### Frontend
 
 ```bash
-cd apps/frontend
-npm install
-npm run dev
+cd apps/frontend && npm install --legacy-peer-deps && npm run dev
 ```
-
-The frontend runs on `http://localhost:5173` and proxies `/api` to `http://localhost:8000`.
 
 ### Backend
 
 ```bash
-cd apps/backend
-python3.11 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
+cd apps/backend && python -m venv .venv && .venv/bin/pip install -r requirements.txt && .venv/bin/uvicorn app.main:app --reload
 ```
 
-The backend runs on `http://localhost:8000`.
+The frontend runs on `http://localhost:5173`. The backend runs on `http://localhost:8000`.
 
-## Environment
+## Environment Variables
 
-Copy the root `.env.example` to `.env` for shared defaults, then override per app if needed.
+| Variable | App | Required | Description |
+| --- | --- | --- | --- |
+| `VITE_API_URL` | frontend | Yes | Backend base URL used by the SPA. |
+| `TURSO_URL` | backend | No | Turso or libSQL database URL for production persistence. |
+| `TURSO_AUTH_TOKEN` | backend | No | Auth token for the Turso database. |
+| `SQLITE_PATH` | backend | No | Local SQLite path used when Turso is not configured. |
+| `LORIEN_DB_PATH` | backend | No | Filesystem path to the local lorien database. |
 
-- Frontend: `apps/frontend/.env.example`
-- Backend: `apps/backend/.env.example`
+See [apps/frontend/.env.example](/Users/superdog/Documents/mnemo/apps/frontend/.env.example) and [apps/backend/.env.example](/Users/superdog/Documents/mnemo/apps/backend/.env.example) for defaults.
 
-## Current scope
+## Deploy
 
-- Health endpoints: `/health/live`, `/health/ready`
-- Note CRUD at `/api/v1/notes`
-- Tree endpoint backed by notes list at `/api/v1/tree`
-- Obsidian-style split view with file list and auto-saving editor
+### Vercel
+
+1. Set the project root to `apps/frontend`.
+2. Configure `VITE_API_URL` to the public Fly.io backend URL.
+3. Deploy with the bundled [vercel.json](/Users/superdog/Documents/mnemo/apps/frontend/vercel.json) settings.
+
+### Fly.io
+
+1. Deploy from `apps/backend` using the included [fly.toml](/Users/superdog/Documents/mnemo/apps/backend/fly.toml) and [Dockerfile](/Users/superdog/Documents/mnemo/apps/backend/Dockerfile).
+2. Set `PORT=8000` and any Turso credentials as Fly secrets or environment variables.
+3. Verify `/health/live` and `/health/ready` after deployment.
+
+## Docs
+
+- [docs/architecture.md](/Users/superdog/Documents/mnemo/docs/architecture.md)
+- [docs/api-contract.md](/Users/superdog/Documents/mnemo/docs/api-contract.md)
+- [docs/runbook.md](/Users/superdog/Documents/mnemo/docs/runbook.md)

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { Component, type ErrorInfo, type ReactNode, useCallback, useEffect, useState } from "react";
 import { FileText, Network, Plus } from "lucide-react";
 import { NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -113,6 +113,39 @@ function GraphScreen() {
   );
 }
 
+class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error(error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex h-screen items-center justify-center text-[#9b9b9b]">
+          <div className="text-center">
+            <p className="text-lg font-medium text-[#1a1a1a]">Something went wrong</p>
+            <button
+              className="mt-2 text-sm underline"
+              onClick={() => this.setState({ hasError: false })}
+              type="button"
+            >
+              Try again
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 export function App() {
   const { setSelectedNoteId, setSavingState } = useNotesStore();
   const createNote = useCreateNote();
@@ -141,13 +174,15 @@ export function App() {
   }, [handleCreateNote]);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#ffffff] text-[#1a1a1a]">
-      <SidebarNav />
-      {location.pathname === "/" ? <FileTree /> : null}
-      <Routes>
-        <Route element={<NotesScreen onCreateNote={handleCreateNote} />} path="/" />
-        <Route element={<GraphScreen />} path="/graph" />
-      </Routes>
-    </div>
+    <ErrorBoundary>
+      <div className="flex h-screen overflow-hidden bg-[#ffffff] text-[#1a1a1a]">
+        <SidebarNav />
+        {location.pathname === "/" ? <FileTree /> : null}
+        <Routes>
+          <Route element={<NotesScreen onCreateNote={handleCreateNote} />} path="/" />
+          <Route element={<GraphScreen />} path="/graph" />
+        </Routes>
+      </div>
+    </ErrorBoundary>
   );
 }
