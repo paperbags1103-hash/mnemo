@@ -1,4 +1,5 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? "";
+const API_KEY = import.meta.env.VITE_MNEMO_API_KEY ?? "";
 
 type RequestOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
@@ -11,6 +12,9 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   if (options.body !== undefined) {
     headers.set("Content-Type", "application/json");
+  }
+  if (API_KEY) {
+    headers.set("X-Api-Key", API_KEY);
   }
 
   let response: Response;
