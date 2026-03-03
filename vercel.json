@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "buildCommand": "cd apps/frontend && npm install --legacy-peer-deps && npm run build",
+  "outputDirectory": "apps/frontend/dist",
+  "rewrites": [
+    { "source": "/api/v1/notes", "destination": "/api/notes" },
+    { "source": "/api/v1/notes/:noteId", "destination": "/api/notes_id?note_id=:noteId" },
+    { "source": "/api/v1/search", "destination": "/api/search" },
+    { "source": "/api/v1/tree", "destination": "/api/tree" },
+    { "source": "/api/health", "destination": "/api/health?check=live" },
+    { "source": "/health/:check", "destination": "/api/health?check=:check" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "functions": {
+    "api/**/*.py": {
+      "runtime": "python3.12"
+    }
+  }
+}
