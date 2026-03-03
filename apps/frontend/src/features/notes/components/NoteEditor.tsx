@@ -50,7 +50,7 @@ export function NoteEditor() {
     editorProps: {
       attributes: {
         class:
-          "h-full min-h-full px-8 py-6 text-[15px] leading-7 text-[#e6edf3] outline-none",
+          "h-full min-h-full px-8 py-6 text-[15px] leading-7 text-[#1a1a1a] outline-none",
       },
     },
     onUpdate: ({ editor: currentEditor }) => {
@@ -159,7 +159,7 @@ export function NoteEditor() {
 
   if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-[#8b949e]">
+      <div className="flex h-full items-center justify-center bg-[#ffffff] text-sm text-[#9b9b9b]">
         Loading note...
       </div>
     );
@@ -167,22 +167,22 @@ export function NoteEditor() {
 
   if (!note) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-[#8b949e]">
+      <div className="flex h-full items-center justify-center bg-[#ffffff] text-sm text-[#9b9b9b]">
         Select or create a note
       </div>
     );
   }
 
   return (
-    <section className="relative flex h-full flex-col overflow-hidden">
-      <div className="flex items-start justify-between gap-4 border-b border-[#30363d] px-8 py-5">
+    <section className="relative flex h-full flex-col overflow-hidden bg-[#ffffff]">
+      <div className="flex items-start justify-between gap-4 border-b border-[#e9e9e7] px-8 py-5">
         <Input
-          className="h-auto border-0 bg-transparent px-0 text-3xl font-semibold text-[#e6edf3] shadow-none focus-visible:ring-0"
+          className="h-auto border-0 bg-transparent px-0 text-3xl font-semibold text-[#1a1a1a] shadow-none focus-visible:ring-0"
           onChange={(event) => setTitle(event.target.value)}
           placeholder="Untitled"
           value={title}
         />
-        <div className="min-w-28 pt-2 text-right text-xs text-[#8b949e]">
+        <div className="min-w-28 pt-2 text-right text-xs text-[#9b9b9b]">
           {statusLabel(savingState)}
         </div>
       </div>

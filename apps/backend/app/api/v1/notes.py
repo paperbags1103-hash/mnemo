@@ -1,3 +1,4 @@
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Response, status
@@ -6,11 +7,17 @@ from app.core.db import db
 from app.models.note import NoteCreate, NoteRead, NoteUpdate
 
 router = APIRouter(prefix="/notes", tags=["notes"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("", response_model=NoteRead, status_code=status.HTTP_201_CREATED)
 async def create_note(payload: NoteCreate) -> NoteRead:
-    return await db.create_note(payload)
+    note = await db.create_note(payload)
+    try:
+        await db.enqueue_ingest(str(note.id))
+    except Exception as exc:
+        logger.warning("Failed to enqueue ingest for note %s: %s", note.id, exc)
+    return note
 
 
 @router.get("", response_model=list[NoteRead])
@@ -36,6 +43,10 @@ async def update_note(note_id: UUID, payload: NoteUpdate) -> NoteRead:
         raise
     if note is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Note not found")
+    try:
+        await db.enqueue_ingest(str(note.id))
+    except Exception as exc:
+        logger.warning("Failed to enqueue ingest for note %s: %s", note.id, exc)
     return note
 
 

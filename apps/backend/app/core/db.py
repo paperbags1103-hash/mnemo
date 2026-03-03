@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 import aiosqlite
 from libsql_client import create_client
 
 from app.core.config import settings
+from app.models.ingest_job import IngestJob
 from app.models.note import Note, NoteCreate, NoteRead, NoteUpdate
 
 
@@ -31,6 +32,21 @@ class DatabaseManager:
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     version INTEGER NOT NULL DEFAULT 1
+                )
+                """
+            )
+            await connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS ingest_job (
+                    id TEXT PRIMARY KEY,
+                    note_id TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    retry_count INTEGER NOT NULL DEFAULT 0,
+                    max_retries INTEGER NOT NULL DEFAULT 3,
+                    next_retry_at TEXT,
+                    error TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
                 )
                 """
             )
@@ -151,6 +167,181 @@ class DatabaseManager:
             "lorien": "available" if settings.resolved_lorien_db_path.exists() else "unavailable",
         }
 
+    async def enqueue_ingest(self, note_id: str) -> IngestJob:
+        created_at = utcnow()
+        job = IngestJob(
+            note_id=note_id,
+            status="pending",
+            retry_count=0,
+            max_retries=3,
+            next_retry_at=None,
+            error=None,
+            created_at=created_at,
+            updated_at=created_at,
+        )
+        async with aiosqlite.connect(self.sqlite_path) as connection:
+            await connection.execute(
+                """
+                INSERT INTO ingest_job (
+                    id, note_id, status, retry_count, max_retries,
+                    next_retry_at, error, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    str(job.id),
+                    job.note_id,
+                    job.status,
+                    job.retry_count,
+                    job.max_retries,
+                    None,
+                    None,
+                    job.created_at.isoformat(),
+                    job.updated_at.isoformat(),
+                ),
+            )
+            await connection.commit()
+        return job
+
+    async def get_pending_jobs(self, limit: int = 10) -> list[IngestJob]:
+        async with aiosqlite.connect(self.sqlite_path) as connection:
+            connection.row_factory = aiosqlite.Row
+            cursor = await connection.execute(
+                """
+                SELECT id, note_id, status, retry_count, max_retries,
+                       next_retry_at, error, created_at, updated_at
+                FROM ingest_job
+                WHERE status = 'pending'
+                  AND (next_retry_at IS NULL OR datetime(next_retry_at) <= datetime('now'))
+                ORDER BY datetime(created_at) ASC
+                LIMIT ?
+                """,
+                (limit,),
+            )
+            rows = await cursor.fetchall()
+            return [self._row_to_ingest_job(row) for row in rows]
+
+    async def get_job(self, job_id: UUID | str) -> IngestJob | None:
+        async with aiosqlite.connect(self.sqlite_path) as connection:
+            connection.row_factory = aiosqlite.Row
+            cursor = await connection.execute(
+                """
+                SELECT id, note_id, status, retry_count, max_retries,
+                       next_retry_at, error, created_at, updated_at
+                FROM ingest_job
+                WHERE id = ?
+                """,
+                (str(job_id),),
+            )
+            row = await cursor.fetchone()
+            return self._row_to_ingest_job(row) if row else None
+
+    async def mark_job_processing(self, job_id: UUID | str) -> None:
+        async with aiosqlite.connect(self.sqlite_path) as connection:
+            await connection.execute(
+                """
+                UPDATE ingest_job
+                SET status = 'processing', next_retry_at = NULL, error = NULL, updated_at = ?
+                WHERE id = ?
+                """,
+                (utcnow().isoformat(), str(job_id)),
+            )
+            await connection.commit()
+
+    async def mark_job_done(self, job_id: UUID | str) -> None:
+        async with aiosqlite.connect(self.sqlite_path) as connection:
+            await connection.execute(
+                """
+                UPDATE ingest_job
+                SET status = 'done', next_retry_at = NULL, error = NULL, updated_at = ?
+                WHERE id = ?
+                """,
+                (utcnow().isoformat(), str(job_id)),
+            )
+            await connection.commit()
+
+    async def mark_job_failed(self, job_id: UUID | str, error: str) -> None:
+        job = await self.get_job(job_id)
+        if job is None:
+            return
+
+        retry_count = job.retry_count + 1
+        updated_at = utcnow()
+        terminal = retry_count >= job.max_retries
+        next_retry_at: datetime | None = None
+        if not terminal:
+            backoff_seconds = 30 * (2 ** retry_count)
+            next_retry_at = updated_at + timedelta(seconds=backoff_seconds)
+
+        async with aiosqlite.connect(self.sqlite_path) as connection:
+            await connection.execute(
+                """
+                UPDATE ingest_job
+                SET status = ?,
+                    retry_count = ?,
+                    next_retry_at = ?,
+                    error = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    "failed" if terminal else "pending",
+                    retry_count,
+                    next_retry_at.isoformat() if next_retry_at is not None else None,
+                    error,
+                    updated_at.isoformat(),
+                    str(job_id),
+                ),
+            )
+            await connection.commit()
+
+    async def retry_job(self, job_id: UUID | str) -> IngestJob | None:
+        job = await self.get_job(job_id)
+        if job is None:
+            return None
+
+        updated_at = utcnow()
+        async with aiosqlite.connect(self.sqlite_path) as connection:
+            await connection.execute(
+                """
+                UPDATE ingest_job
+                SET status = 'pending', retry_count = 0, next_retry_at = NULL, error = NULL, updated_at = ?
+                WHERE id = ?
+                """,
+                (updated_at.isoformat(), str(job_id)),
+            )
+            await connection.commit()
+        return await self.get_job(job_id)
+
+    async def list_jobs(self, status: str | None = None, limit: int = 20) -> list[IngestJob]:
+        async with aiosqlite.connect(self.sqlite_path) as connection:
+            connection.row_factory = aiosqlite.Row
+            if status:
+                cursor = await connection.execute(
+                    """
+                    SELECT id, note_id, status, retry_count, max_retries,
+                           next_retry_at, error, created_at, updated_at
+                    FROM ingest_job
+                    WHERE status = ?
+                    ORDER BY datetime(created_at) DESC
+                    LIMIT ?
+                    """,
+                    (status, limit),
+                )
+            else:
+                cursor = await connection.execute(
+                    """
+                    SELECT id, note_id, status, retry_count, max_retries,
+                           next_retry_at, error, created_at, updated_at
+                    FROM ingest_job
+                    ORDER BY datetime(created_at) DESC
+                    LIMIT ?
+                    """,
+                    (limit,),
+                )
+            rows = await cursor.fetchall()
+            return [self._row_to_ingest_job(row) for row in rows]
+
     @staticmethod
     def _row_to_note(row: aiosqlite.Row) -> NoteRead:
         return NoteRead(
@@ -166,6 +357,20 @@ class DatabaseManager:
     @staticmethod
     def _note_to_read(note: Note) -> NoteRead:
         return NoteRead.model_validate(note.model_dump())
+
+    @staticmethod
+    def _row_to_ingest_job(row: aiosqlite.Row) -> IngestJob:
+        return IngestJob(
+            id=UUID(row["id"]),
+            note_id=row["note_id"],
+            status=row["status"],
+            retry_count=row["retry_count"],
+            max_retries=row["max_retries"],
+            next_retry_at=datetime.fromisoformat(row["next_retry_at"]) if row["next_retry_at"] else None,
+            error=row["error"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+            updated_at=datetime.fromisoformat(row["updated_at"]),
+        )
 
 
 db = DatabaseManager()

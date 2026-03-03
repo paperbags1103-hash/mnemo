@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import asyncio
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,12 +8,19 @@ from fastapi.responses import JSONResponse
 from app.api.v1 import health, ingest, lorien, notes, search, tree
 from app.core.config import settings
 from app.core.db import db
+from app.workers.ingest_worker import run_worker
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await db.initialize()
+    worker_task = asyncio.create_task(run_worker(interval_seconds=10))
     yield
+    worker_task.cancel()
+    try:
+        await worker_task
+    except asyncio.CancelledError:
+        pass
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)

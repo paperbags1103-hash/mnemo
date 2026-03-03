@@ -37,15 +37,15 @@ export function FileTree({ onDeletedNote }: FileTreeProps) {
   }
 
   return (
-    <aside className="flex h-full w-[240px] flex-col border-r border-[#30363d] bg-[#161b22]">
-      <div className="border-b border-[#30363d] px-4 py-3">
-        <p className="text-[11px] uppercase tracking-[0.28em] text-[#8b949e]">notes</p>
+    <aside className="flex h-full w-[240px] flex-col border-r border-[#e9e9e7] bg-[#f7f7f5]">
+      <div className="border-b border-[#e9e9e7] px-4 py-3">
+        <p className="text-[11px] uppercase tracking-[0.28em] text-[#9b9b9b]">notes</p>
       </div>
       <div className="flex-1 overflow-y-auto px-2 py-3">
         {isLoading ? (
-          <p className="px-2 py-3 text-sm text-[#8b949e]">Loading notes...</p>
+          <p className="px-2 py-3 text-sm text-[#9b9b9b]">Loading notes...</p>
         ) : notes.length === 0 ? (
-          <p className="px-2 py-3 text-sm text-[#8b949e]">Create your first note.</p>
+          <p className="px-2 py-3 text-sm text-[#9b9b9b]">Create your first note.</p>
         ) : (
           <ul className="space-y-1">
             {notes.map((note) => (
@@ -54,8 +54,8 @@ export function FileTree({ onDeletedNote }: FileTreeProps) {
                   className={cn(
                     "group flex items-center gap-2 rounded-md border border-transparent px-3 py-2 transition-colors",
                     note.id === selectedNoteId
-                      ? "border-[#30363d] bg-[#0d1117]"
-                      : "hover:bg-[#0d1117]",
+                      ? "border-[#e9e9e7] bg-[#efefed]"
+                      : "hover:bg-[#f0f0ee]",
                   )}
                 >
                   <button
@@ -63,10 +63,10 @@ export function FileTree({ onDeletedNote }: FileTreeProps) {
                     onClick={() => setSelectedNoteId(note.id)}
                     type="button"
                   >
-                    <p className="truncate text-sm font-medium text-[#e6edf3]">
+                    <p className="truncate text-sm font-medium text-[#1a1a1a]">
                       {note.title || "Untitled"}
                     </p>
-                    <p className="truncate text-xs text-[#8b949e]">
+                    <p className="truncate text-xs text-[#9b9b9b]">
                       {formatUpdatedAt(note.updated_at)}
                     </p>
                   </button>
@@ -76,7 +76,7 @@ export function FileTree({ onDeletedNote }: FileTreeProps) {
                     onClick={() => void handleDelete(note.id)}
                     type="button"
                   >
-                    <Trash2 className="h-4 w-4 text-[#8b949e] hover:text-[#f85149]" />
+                    <Trash2 className="h-4 w-4 text-[#9b9b9b] hover:text-[#e03e3e]" />
                   </button>
                 </div>
               </li>

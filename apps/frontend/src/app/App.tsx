@@ -33,13 +33,13 @@ export function App() {
   }, [handleCreateNote]);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#0d1117] text-[#e6edf3]">
+    <div className="flex h-screen overflow-hidden bg-[#ffffff] text-[#1a1a1a]">
       <FileTree />
       <section className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 items-center justify-between border-b border-[#30363d] px-6">
-          <h1 className="text-lg font-semibold tracking-[0.08em] text-[#e6edf3]">mnemo</h1>
+        <header className="flex h-14 items-center justify-between border-b border-[#e9e9e7] bg-[#ffffff] px-6">
+          <h1 className="text-lg font-bold tracking-[0.08em] text-[#1a1a1a]">mnemo</h1>
           <Button
-            className="gap-2 border border-[#30363d] bg-[#21262d] text-[#e6edf3] hover:bg-[#30363d]"
+            className="gap-2 border border-[#e9e9e7] bg-[#f0f0ee] text-[#1a1a1a] hover:bg-[#e9e9e7]"
             onClick={() => void handleCreateNote()}
             type="button"
           >

@@ -5,19 +5,19 @@
 @tailwind utilities;
 
 :root {
-  --background: 222 47% 6%;
-  --foreground: 210 40% 92%;
-  --card: 215 28% 12%;
-  --card-foreground: 210 40% 92%;
-  --primary: 213 13% 82%;
-  --primary-foreground: 222 47% 6%;
-  --muted: 214 19% 19%;
-  --muted-foreground: 215 13% 61%;
-  --accent: 214 19% 19%;
-  --accent-foreground: 210 40% 92%;
-  --border: 215 14% 22%;
-  --input: 215 14% 22%;
-  --ring: 213 13% 82%;
+  --background: 48 20% 98%;
+  --foreground: 0 0% 10%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 10%;
+  --primary: 0 0% 10%;
+  --primary-foreground: 0 0% 100%;
+  --muted: 40 12% 94%;
+  --muted-foreground: 0 0% 61%;
+  --accent: 40 12% 94%;
+  --accent-foreground: 0 0% 10%;
+  --border: 40 8% 91%;
+  --input: 40 8% 91%;
+  --ring: 0 0% 10%;
 }
 
 html,
@@ -27,7 +27,8 @@ body {
   min-width: 320px;
   min-height: 100vh;
   overflow: hidden;
-  background: #0d1117;
+  background: #ffffff;
+  color: #1a1a1a;
 }
 
 #root {
@@ -56,7 +57,7 @@ body {
 }
 
 .tiptap p.is-editor-empty:first-child::before {
-  color: #8b949e;
+  color: #b0b0b0;
   content: attr(data-placeholder);
   float: left;
   height: 0;
