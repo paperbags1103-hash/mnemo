@@ -4,18 +4,11 @@ import json
 import os as _os
 import sys as _sys
 _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
-import os
 from http.server import BaseHTTPRequestHandler
 
 from _lib.db import close_conn, create_note, initialize, list_notes, upsert_note
 from _lib.models import NoteCreate
-from _lib.auth import check_auth as _check_auth_fn
-
-MNEMO_API_KEY = os.environ.get("MNEMO_API_KEY", "")
-
-
-def _check_auth(headers) -> bool:
-    return _check_auth_fn(headers)
+from _lib.auth import check_write_auth
 
 
 class handler(BaseHTTPRequestHandler):
@@ -28,9 +21,6 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(body.encode())
 
     def do_GET(self):
-        if not _check_auth(self.headers):
-            self._write_json(401, {"detail": "Invalid or missing API key"})
-            return
         try:
             conn = initialize()
             try:
@@ -43,8 +33,8 @@ class handler(BaseHTTPRequestHandler):
             self._write_json(500, {"error": str(exc), "trace": traceback.format_exc()[-500:]})
 
     def do_POST(self):
-        if not _check_auth(self.headers):
-            self._write_json(401, {"detail": "Invalid or missing API key"})
+        if not check_write_auth(self.headers):
+            self._write_json(401, {"detail": "Unauthorized"})
             return
         length = int(self.headers.get("Content-Length", 0))
         raw = self.rfile.read(length)
@@ -57,8 +47,8 @@ class handler(BaseHTTPRequestHandler):
         self._write_json(201, note.model_dump(mode="json"))
 
     def do_PUT(self):
-        if not _check_auth(self.headers):
-            self._write_json(401, {"detail": "Invalid or missing API key"})
+        if not check_write_auth(self.headers):
+            self._write_json(401, {"detail": "Unauthorized"})
             return
         length = int(self.headers.get("Content-Length", 0))
         raw = self.rfile.read(length)
@@ -74,5 +64,5 @@ class handler(BaseHTTPRequestHandler):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Api-Key")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Api-Key, Authorization")
         self.end_headers()

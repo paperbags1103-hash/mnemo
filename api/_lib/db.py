@@ -52,17 +52,12 @@ def initialize():
         pass
     conn.execute(
         """
-        CREATE VIRTUAL TABLE IF NOT EXISTS note_fts
-        USING fts5(id UNINDEXED, title, content, tokenize='trigram')
-        """
-    )
-    conn.execute(
-        """
-        INSERT INTO note_fts (id, title, content)
-        SELECT n.id, n.title, n.content
-        FROM note n
-        WHERE NOT EXISTS (
-            SELECT 1 FROM note_fts WHERE id = n.id
+        CREATE TABLE IF NOT EXISTS note_link (
+            source_id TEXT NOT NULL,
+            target_id TEXT NOT NULL,
+            link_type TEXT DEFAULT 'manual',
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (source_id, target_id)
         )
         """
     )
@@ -137,10 +132,6 @@ def create_note(conn, payload: NoteCreate) -> NoteRead:
         """,
         (note_id, payload.title, payload.content, payload.folder_id, json.dumps(payload.tags), now, now, 1),
     )
-    conn.execute(
-        "INSERT INTO note_fts (id, title, content) VALUES (?, ?, ?)",
-        (note_id, payload.title, payload.content),
-    )
     conn.commit()
     return get_note(conn, note_id)
 
@@ -173,50 +164,29 @@ def update_note(conn, note_id: str, payload: NoteUpdate) -> NoteRead | None:
         """,
         (title, content, folder_id, json.dumps(tags), now, new_version, note_id),
     )
-    conn.execute("DELETE FROM note_fts WHERE id = ?", (note_id,))
-    conn.execute(
-        "INSERT INTO note_fts (id, title, content) VALUES (?, ?, ?)",
-        (note_id, title, content),
-    )
     conn.commit()
     return get_note(conn, note_id)
 
 
 def delete_note(conn, note_id: str) -> bool:
     cur = conn.execute("DELETE FROM note WHERE id = ?", (note_id,))
-    conn.execute("DELETE FROM note_fts WHERE id = ?", (note_id,))
+    conn.execute("DELETE FROM note_link WHERE source_id = ? OR target_id = ?", (note_id, note_id))
     conn.commit()
     return cur.rowcount > 0
 
 
 def search_notes(conn, query: str, limit: int = 10) -> list[NoteRead]:
-    conn.execute(
+    pattern = f"%{query}%"
+    cur = conn.execute(
         """
-        CREATE VIRTUAL TABLE IF NOT EXISTS note_fts
-        USING fts5(id UNINDEXED, title, content, tokenize='trigram')
-        """
+        SELECT id, title, content, folder_id, tags, created_at, updated_at, version
+        FROM note
+        WHERE title LIKE ? OR content LIKE ?
+        ORDER BY datetime(updated_at) DESC
+        LIMIT ?
+        """,
+        (pattern, pattern, limit),
     )
-    try:
-        cur = conn.execute(
-            """
-            SELECT n.id, n.title, n.content, n.folder_id, n.tags, n.created_at, n.updated_at, n.version
-            FROM note n JOIN note_fts fts ON n.id = fts.id
-            WHERE note_fts MATCH ? ORDER BY rank LIMIT ?
-            """,
-            (query, limit),
-        )
-    except Exception:
-        pattern = f"%{query}%"
-        cur = conn.execute(
-            """
-            SELECT id, title, content, folder_id, tags, created_at, updated_at, version
-            FROM note
-            WHERE title LIKE ? OR content LIKE ?
-            ORDER BY datetime(updated_at) DESC
-            LIMIT ?
-            """,
-            (pattern, pattern, limit),
-        )
     return [_row_to_note(row) for row in cur.fetchall()]
 
 
@@ -233,11 +203,43 @@ def upsert_note(conn, payload: NoteCreate) -> tuple:
             "UPDATE note SET content=?, folder_id=?, tags=?, updated_at=?, version=version+1 WHERE id=?",
             (payload.content, payload.folder_id, json.dumps(payload.tags), now, note_id),
         )
-        conn.execute("DELETE FROM note_fts WHERE id = ?", (note_id,))
-        conn.execute(
-            "INSERT INTO note_fts (id, title, content) VALUES (?, ?, ?)",
-            (note_id, payload.title, payload.content),
-        )
         conn.commit()
         return get_note(conn, note_id), False
     return create_note(conn, payload), True
+
+
+def get_links(conn, note_id: str) -> dict:
+    """Returns outlinks and backlinks for a note."""
+    outlinks = conn.execute(
+        "SELECT target_id, link_type, created_at FROM note_link WHERE source_id = ?",
+        (note_id,),
+    ).fetchall()
+    backlinks = conn.execute(
+        "SELECT source_id, link_type, created_at FROM note_link WHERE target_id = ?",
+        (note_id,),
+    ).fetchall()
+    return {
+        "outlinks": [{"note_id": r[0], "link_type": r[1], "created_at": r[2]} for r in outlinks],
+        "backlinks": [{"note_id": r[0], "link_type": r[1], "created_at": r[2]} for r in backlinks],
+    }
+
+
+def create_link(conn, source_id: str, target_id: str, link_type: str = "manual") -> bool:
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO note_link (source_id, target_id, link_type, created_at) VALUES (?, ?, ?, ?)",
+            (source_id, target_id, link_type, datetime.now(timezone.utc).isoformat()),
+        )
+        conn.commit()
+        return True
+    except Exception:
+        return False
+
+
+def delete_link(conn, source_id: str, target_id: str) -> bool:
+    conn.execute(
+        "DELETE FROM note_link WHERE source_id = ? AND target_id = ?",
+        (source_id, target_id),
+    )
+    conn.commit()
+    return True

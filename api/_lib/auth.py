@@ -1,7 +1,8 @@
-"""Shared auth helper — handles HTTP/2 lowercase header normalization."""
+"""Shared auth helpers."""
 import os
 
 MNEMO_API_KEY = os.environ.get("MNEMO_API_KEY", "").strip()
+MNEMO_TOKEN = os.environ.get("MNEMO_TOKEN", "")
 
 
 def check_auth(headers) -> bool:
@@ -14,3 +15,11 @@ def check_auth(headers) -> bool:
         return True
     received = headers.get("X-Api-Key") or headers.get("x-api-key") or ""
     return received == MNEMO_API_KEY
+
+
+def check_write_auth(headers) -> bool:
+    """Returns True if write access is allowed. GET requests skip this."""
+    if not MNEMO_TOKEN:
+        return True
+    auth = headers.get("Authorization", "")
+    return auth == f"Bearer {MNEMO_TOKEN}"

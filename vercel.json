@@ -5,6 +5,8 @@
   "rewrites": [
     { "source": "/api/v1/notes", "destination": "/api/notes" },
     { "source": "/api/v1/notes/:noteId", "destination": "/api/notes_id?note_id=:noteId" },
+    { "source": "/api/v1/notes/:noteId/links", "destination": "/api/links?note_id=:noteId" },
+    { "source": "/api/v1/links", "destination": "/api/links" },
     { "source": "/api/v1/search", "destination": "/api/search" },
     { "source": "/api/v1/tree", "destination": "/api/tree" },
     { "source": "/api/v1/webhooks/save", "destination": "/api/webhook" },

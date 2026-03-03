@@ -6,7 +6,7 @@ import sys as _sys
 _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
 from http.server import BaseHTTPRequestHandler
 
-from _lib.auth import check_auth as _check_auth_fn
+from _lib.auth import check_write_auth
 from _lib.db import close_conn, create_note, initialize, upsert_note
 from _lib.models import NoteCreate
 
@@ -21,8 +21,8 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(body.encode())
 
     def do_POST(self):
-        if MNEMO_API_KEY and self.headers.get("X-Api-Key") != MNEMO_API_KEY:
-            self._write_json(401, {"detail": "Invalid or missing API key"})
+        if not check_write_auth(self.headers):
+            self._write_json(401, {"detail": "Unauthorized"})
             return
 
         length = int(self.headers.get("Content-Length", 0))
@@ -51,5 +51,5 @@ class handler(BaseHTTPRequestHandler):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Api-Key")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Api-Key, Authorization")
         self.end_headers()
