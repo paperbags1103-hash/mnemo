@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,6 +12,7 @@ class Settings(BaseSettings):
     turso_auth_token: str | None = None
     sqlite_path: str = "sqlite:///./mnemo.db"
     lorien_db_path: str = "~/.openclaw/workspace/.lorien/db"
+    mnemo_api_key: str = Field(default="", env="MNEMO_API_KEY")
 
     model_config = SettingsConfigDict(
         env_file=".env",

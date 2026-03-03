@@ -1,18 +1,30 @@
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
+from app.core.auth import verify_api_key
 from app.core.db import db
 from app.models.note import NoteCreate, NoteRead, NoteUpdate
 
-router = APIRouter(prefix="/notes", tags=["notes"])
+router = APIRouter(prefix="/notes", tags=["notes"], dependencies=[Depends(verify_api_key)])
 logger = logging.getLogger(__name__)
 
 
 @router.post("", response_model=NoteRead, status_code=status.HTTP_201_CREATED)
 async def create_note(payload: NoteCreate) -> NoteRead:
     note = await db.create_note(payload)
+    try:
+        await db.enqueue_ingest(str(note.id))
+    except Exception as exc:
+        logger.warning("Failed to enqueue ingest for note %s: %s", note.id, exc)
+    return note
+
+
+@router.put("", response_model=NoteRead)
+async def upsert_note(payload: NoteCreate) -> NoteRead:
+    """Create note or update if title already exists."""
+    note, _created = await db.upsert_note(payload)
     try:
         await db.enqueue_ingest(str(note.id))
     except Exception as exc:

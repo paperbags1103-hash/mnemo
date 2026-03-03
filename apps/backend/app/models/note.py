@@ -15,6 +15,7 @@ class NoteBase(SQLModel):
     title: str = Field(default="Untitled", max_length=255)
     content: str = Field(default="", max_length=1_000_000)
     folder_id: str | None = Field(default=None, max_length=255)
+    tags: list[str] = Field(default_factory=list)
 
 
 class Note(NoteBase):
@@ -39,4 +40,5 @@ class NoteUpdate(SQLModel):
     title: Optional[str] = Field(default=None, max_length=255)
     content: Optional[str] = Field(default=None, max_length=1_000_000)
     folder_id: Optional[str] = Field(default=None, max_length=255)
+    tags: Optional[list[str]] = None
     version: Optional[int] = None

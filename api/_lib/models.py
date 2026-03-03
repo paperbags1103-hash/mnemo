@@ -15,6 +15,7 @@ class NoteBase(BaseModel):
     title: str = Field(default="Untitled", max_length=255)
     content: str = Field(default="", max_length=1_000_000)
     folder_id: Optional[str] = Field(default=None, max_length=255)
+    tags: list[str] = Field(default_factory=list)
 
 
 class NoteCreate(NoteBase):
@@ -25,6 +26,7 @@ class NoteUpdate(BaseModel):
     title: Optional[str] = Field(default=None, max_length=255)
     content: Optional[str] = Field(default=None, max_length=1_000_000)
     folder_id: Optional[str] = Field(default=None, max_length=255)
+    tags: Optional[list[str]] = None
     version: Optional[int] = None
 
 

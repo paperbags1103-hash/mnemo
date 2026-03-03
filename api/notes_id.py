@@ -4,8 +4,15 @@ import json
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 
+from _lib.config import MNEMO_API_KEY
 from _lib.db import close_conn, delete_note, get_note, initialize, update_note
 from _lib.models import NoteUpdate
+
+
+def _check_auth(headers) -> bool:
+    if not MNEMO_API_KEY:
+        return True
+    return headers.get("X-Api-Key") == MNEMO_API_KEY
 
 
 class handler(BaseHTTPRequestHandler):
@@ -27,6 +34,9 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        if not _check_auth(self.headers):
+            self._write_json(401, {"detail": "Invalid or missing API key"})
+            return
         note_id = self._note_id()
         if not note_id:
             self._write_json(400, {"detail": "note_id is required"})
@@ -45,6 +55,9 @@ class handler(BaseHTTPRequestHandler):
         self._write_json(200, note.model_dump(mode="json"))
 
     def do_PATCH(self):
+        if not _check_auth(self.headers):
+            self._write_json(401, {"detail": "Invalid or missing API key"})
+            return
         note_id = self._note_id()
         if not note_id:
             self._write_json(400, {"detail": "note_id is required"})
@@ -72,6 +85,9 @@ class handler(BaseHTTPRequestHandler):
         self._write_json(200, note.model_dump(mode="json"))
 
     def do_DELETE(self):
+        if not _check_auth(self.headers):
+            self._write_json(401, {"detail": "Invalid or missing API key"})
+            return
         note_id = self._note_id()
         if not note_id:
             self._write_json(400, {"detail": "note_id is required"})
@@ -93,5 +109,5 @@ class handler(BaseHTTPRequestHandler):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, PATCH, DELETE, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Api-Key")
         self.end_headers()

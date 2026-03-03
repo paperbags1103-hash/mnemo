@@ -34,6 +34,43 @@ def save(
 
 
 @app.command()
+def upsert(
+    content: str = typer.Argument(..., help="Note content"),
+    title: str = typer.Option("", "--title", "-t"),
+) -> None:
+    """Create or update note by title."""
+    if not title:
+        first_line = content.split("\n", 1)[0].strip("#").strip()
+        title = first_line[:60] if first_line else "Untitled"
+
+    note = get_client().upsert_note(title=title, content=content)
+    console.print(f"[green]OK[/green] Upserted: [bold]{note['title']}[/bold] (id: {note['id'][:8]}...)")
+
+
+@app.command()
+def webhook(
+    content: str = typer.Argument(..., help="Webhook note content"),
+    title: str = typer.Option("", "--title", "-t"),
+    source: str = typer.Option("", "--source", "-s"),
+    upsert: bool = typer.Option(False, "--upsert", help="Update latest note with matching title"),
+    tags: list[str] = typer.Option([], "--tag", help="Repeatable tag"),
+) -> None:
+    """Send a note through the webhook endpoint."""
+    if not title:
+        first_line = content.split("\n", 1)[0].strip("#").strip()
+        title = first_line[:60] if first_line else "Untitled"
+
+    note = get_client().webhook_save(
+        title=title,
+        content=content,
+        source=source,
+        upsert=upsert,
+        tags=tags,
+    )
+    console.print(f"[green]OK[/green] Webhook saved: [bold]{note['title']}[/bold] (id: {note['id'][:8]}...)")
+
+
+@app.command()
 def search(
     query: str = typer.Argument(..., help="Search query"),
     limit: int = typer.Option(10, "--limit", "-n"),

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
@@ -31,9 +32,36 @@ class DatabaseManager:
                     title TEXT NOT NULL,
                     content TEXT NOT NULL DEFAULT '',
                     folder_id TEXT,
+                    tags TEXT NOT NULL DEFAULT '[]',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     version INTEGER NOT NULL DEFAULT 1
+                )
+                """
+            )
+            try:
+                await connection.execute("ALTER TABLE note ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'")
+                await connection.commit()
+            except Exception:
+                pass
+            await connection.execute(
+                """
+                CREATE VIRTUAL TABLE IF NOT EXISTS note_fts
+                USING fts5(
+                    id UNINDEXED,
+                    title,
+                    content,
+                    tokenize='trigram'
+                )
+                """
+            )
+            await connection.execute(
+                """
+                INSERT INTO note_fts (id, title, content)
+                SELECT n.id, n.title, n.content
+                FROM note n
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM note_fts WHERE id = n.id
                 )
                 """
             )
@@ -59,7 +87,7 @@ class DatabaseManager:
             connection.row_factory = aiosqlite.Row
             cursor = await connection.execute(
                 """
-                SELECT id, title, content, folder_id, created_at, updated_at, version
+                SELECT id, title, content, folder_id, tags, created_at, updated_at, version
                 FROM note
                 ORDER BY datetime(updated_at) DESC
                 """
@@ -68,19 +96,32 @@ class DatabaseManager:
             return [self._row_to_note(row) for row in rows]
 
     async def search_notes(self, query: str, limit: int = 10) -> list[NoteRead]:
-        pattern = f"%{query}%"
         async with aiosqlite.connect(self.sqlite_path) as connection:
             connection.row_factory = aiosqlite.Row
-            cursor = await connection.execute(
-                """
-                SELECT id, title, content, folder_id, created_at, updated_at, version
-                FROM note
-                WHERE title LIKE ? OR content LIKE ?
-                ORDER BY datetime(updated_at) DESC
-                LIMIT ?
-                """,
-                (pattern, pattern, limit),
-            )
+            try:
+                cursor = await connection.execute(
+                    """
+                    SELECT n.id, n.title, n.content, n.folder_id, n.tags, n.created_at, n.updated_at, n.version
+                    FROM note n
+                    JOIN note_fts fts ON n.id = fts.id
+                    WHERE note_fts MATCH ?
+                    ORDER BY rank
+                    LIMIT ?
+                    """,
+                    (query, limit),
+                )
+            except Exception:
+                pattern = f"%{query}%"
+                cursor = await connection.execute(
+                    """
+                    SELECT id, title, content, folder_id, tags, created_at, updated_at, version
+                    FROM note
+                    WHERE title LIKE ? OR content LIKE ?
+                    ORDER BY datetime(updated_at) DESC
+                    LIMIT ?
+                    """,
+                    (pattern, pattern, limit),
+                )
             rows = await cursor.fetchall()
             return [self._row_to_note(row) for row in rows]
 
@@ -89,7 +130,7 @@ class DatabaseManager:
             connection.row_factory = aiosqlite.Row
             cursor = await connection.execute(
                 """
-                SELECT id, title, content, folder_id, created_at, updated_at, version
+                SELECT id, title, content, folder_id, tags, created_at, updated_at, version
                 FROM note
                 WHERE id = ?
                 """,
@@ -105,6 +146,7 @@ class DatabaseManager:
             title=payload.title,
             content=payload.content,
             folder_id=payload.folder_id,
+            tags=payload.tags,
             created_at=created_at,
             updated_at=created_at,
             version=1,
@@ -112,18 +154,23 @@ class DatabaseManager:
         async with aiosqlite.connect(self.sqlite_path) as connection:
             await connection.execute(
                 """
-                INSERT INTO note (id, title, content, folder_id, created_at, updated_at, version)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO note (id, title, content, folder_id, tags, created_at, updated_at, version)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     str(note.id),
                     note.title,
                     note.content,
                     note.folder_id,
+                    json.dumps(note.tags),
                     note.created_at.isoformat(),
                     note.updated_at.isoformat(),
                     note.version,
                 ),
+            )
+            await connection.execute(
+                "INSERT INTO note_fts (id, title, content) VALUES (?, ?, ?)",
+                (str(note.id), note.title, note.content),
             )
             await connection.commit()
         return self._note_to_read(note)
@@ -150,17 +197,23 @@ class DatabaseManager:
             await connection.execute(
                 """
                 UPDATE note
-                SET title = ?, content = ?, folder_id = ?, updated_at = ?, version = ?
+                SET title = ?, content = ?, folder_id = ?, tags = ?, updated_at = ?, version = ?
                 WHERE id = ?
                 """,
                 (
                     current.title,
                     current.content,
                     current.folder_id,
+                    json.dumps(current.tags),
                     current.updated_at.isoformat(),
                     current.version,
                     str(current.id),
                 ),
+            )
+            await connection.execute("DELETE FROM note_fts WHERE id = ?", (str(current.id),))
+            await connection.execute(
+                "INSERT INTO note_fts (id, title, content) VALUES (?, ?, ?)",
+                (str(current.id), current.title, current.content),
             )
             await connection.commit()
         return current
@@ -168,8 +221,29 @@ class DatabaseManager:
     async def delete_note(self, note_id: UUID | str) -> bool:
         async with aiosqlite.connect(self.sqlite_path) as connection:
             cursor = await connection.execute("DELETE FROM note WHERE id = ?", (str(note_id),))
+            await connection.execute("DELETE FROM note_fts WHERE id = ?", (str(note_id),))
             await connection.commit()
             return cursor.rowcount > 0
+
+    async def upsert_note(self, payload: NoteCreate) -> tuple[NoteRead, bool]:
+        """Find note by title and update content, or create new."""
+        async with aiosqlite.connect(self.sqlite_path) as connection:
+            connection.row_factory = aiosqlite.Row
+            cursor = await connection.execute(
+                "SELECT id FROM note WHERE title = ? ORDER BY datetime(created_at) DESC LIMIT 1",
+                (payload.title,),
+            )
+            row = await cursor.fetchone()
+        if row:
+            note = await self.update_note(
+                row["id"],
+                NoteUpdate(content=payload.content, folder_id=payload.folder_id, tags=payload.tags),
+            )
+            if note is None:
+                raise RuntimeError("upsert_target_missing")
+            return note, False
+        note = await self.create_note(payload)
+        return note, True
 
     async def ready_status(self) -> dict[str, str]:
         turso = "error"
@@ -373,6 +447,7 @@ class DatabaseManager:
             title=row["title"],
             content=row["content"],
             folder_id=row["folder_id"],
+            tags=json.loads(row["tags"] or "[]"),
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
             version=row["version"],

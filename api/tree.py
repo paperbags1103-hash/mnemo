@@ -1,13 +1,29 @@
 """GET /api/v1/tree."""
 
 import json
+import os
 from http.server import BaseHTTPRequestHandler
 
 from _lib.db import close_conn, initialize, list_notes
 
+MNEMO_API_KEY = os.environ.get("MNEMO_API_KEY", "")
+
+
+def _check_auth(headers) -> bool:
+    if not MNEMO_API_KEY:
+        return True
+    return headers.get("X-Api-Key") == MNEMO_API_KEY
+
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
+        if not _check_auth(self.headers):
+            self.send_response(401)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps({"detail": "Invalid or missing API key"}).encode())
+            return
         conn = initialize()
         try:
             notes = list_notes(conn)
@@ -36,5 +52,5 @@ class handler(BaseHTTPRequestHandler):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Api-Key")
         self.end_headers()
