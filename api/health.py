@@ -1,6 +1,9 @@
 """GET /health/live and /health/ready."""
 
 import json
+import os as _os
+import sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 

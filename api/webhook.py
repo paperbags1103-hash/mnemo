@@ -1,6 +1,9 @@
 """POST /api/v1/webhooks/save."""
 
 import json
+import os as _os
+import sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
 from http.server import BaseHTTPRequestHandler
 
 from _lib.config import MNEMO_API_KEY
