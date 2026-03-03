@@ -18,4 +18,5 @@ export type UpdateNoteInput = {
   title?: string;
   content?: string;
   folder_id?: string | null;
+  version?: number;
 };

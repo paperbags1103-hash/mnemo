@@ -3,19 +3,19 @@ import { api } from "@/lib/api";
 import { queryClient } from "@/lib/queryClient";
 import type { CreateNoteInput, Note, UpdateNoteInput } from "@/features/notes/types";
 
-const NOTES_QUERY_KEY = ["notes"];
+export const NOTES_QUERY_KEY = ["notes"];
 
-export function useNotes() {
+export function useNotesList() {
   return useQuery({
     queryKey: NOTES_QUERY_KEY,
     queryFn: () => api.get<Note[]>("/api/v1/notes"),
   });
 }
 
-export function useNote(noteId?: string) {
+export function useNote(noteId: string | null) {
   return useQuery({
     queryKey: ["notes", noteId],
-    enabled: Boolean(noteId),
+    enabled: noteId !== null,
     queryFn: () => api.get<Note>(`/api/v1/notes/${noteId}`),
   });
 }
@@ -24,6 +24,7 @@ export function useCreateNote() {
   return useMutation({
     mutationFn: (payload: CreateNoteInput) => api.post<Note>("/api/v1/notes", payload),
     onSuccess: (note) => {
+      queryClient.invalidateQueries({ queryKey: NOTES_QUERY_KEY });
       queryClient.setQueryData<Note[]>(NOTES_QUERY_KEY, (current) =>
         current ? [note, ...current] : [note],
       );
@@ -37,9 +38,23 @@ export function useUpdateNote() {
     mutationFn: ({ noteId, payload }: { noteId: string; payload: UpdateNoteInput }) =>
       api.patch<Note>(`/api/v1/notes/${noteId}`, payload),
     onSuccess: (note) => {
+      queryClient.invalidateQueries({ queryKey: NOTES_QUERY_KEY });
       queryClient.setQueryData(["notes", note.id], note);
       queryClient.setQueryData<Note[]>(NOTES_QUERY_KEY, (current) =>
         current?.map((entry) => (entry.id === note.id ? note : entry)) ?? [note],
+      );
+    },
+  });
+}
+
+export function useDeleteNote() {
+  return useMutation({
+    mutationFn: (noteId: string) => api.delete<void>(`/api/v1/notes/${noteId}`),
+    onSuccess: (_, noteId) => {
+      queryClient.invalidateQueries({ queryKey: NOTES_QUERY_KEY });
+      queryClient.removeQueries({ queryKey: ["notes", noteId] });
+      queryClient.setQueryData<Note[]>(NOTES_QUERY_KEY, (current) =>
+        current?.filter((entry) => entry.id !== noteId) ?? [],
       );
     },
   });

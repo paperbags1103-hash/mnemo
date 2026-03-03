@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import aiosqlite
 from libsql_client import create_client
 
 from app.core.config import settings
-from app.models.note import Note, NoteCreate, NoteUpdate
+from app.models.note import Note, NoteCreate, NoteRead, NoteUpdate
 
 
 def utcnow() -> datetime:
@@ -36,7 +36,7 @@ class DatabaseManager:
             )
             await connection.commit()
 
-    async def list_notes(self) -> list[Note]:
+    async def list_notes(self) -> list[NoteRead]:
         async with aiosqlite.connect(self.sqlite_path) as connection:
             connection.row_factory = aiosqlite.Row
             cursor = await connection.execute(
@@ -49,7 +49,7 @@ class DatabaseManager:
             rows = await cursor.fetchall()
             return [self._row_to_note(row) for row in rows]
 
-    async def get_note(self, note_id: UUID | str) -> Note | None:
+    async def get_note(self, note_id: UUID | str) -> NoteRead | None:
         async with aiosqlite.connect(self.sqlite_path) as connection:
             connection.row_factory = aiosqlite.Row
             cursor = await connection.execute(
@@ -63,8 +63,17 @@ class DatabaseManager:
             row = await cursor.fetchone()
             return self._row_to_note(row) if row else None
 
-    async def create_note(self, payload: NoteCreate) -> Note:
-        note = Note.model_validate(payload.model_dump())
+    async def create_note(self, payload: NoteCreate) -> NoteRead:
+        created_at = utcnow()
+        note = Note(
+            id=uuid4(),
+            title=payload.title,
+            content=payload.content,
+            folder_id=payload.folder_id,
+            created_at=created_at,
+            updated_at=created_at,
+            version=1,
+        )
         async with aiosqlite.connect(self.sqlite_path) as connection:
             await connection.execute(
                 """
@@ -82,22 +91,25 @@ class DatabaseManager:
                 ),
             )
             await connection.commit()
-        return note
+        return self._note_to_read(note)
 
-    async def update_note(self, note_id: UUID | str, payload: NoteUpdate) -> Note | None:
+    async def update_note(self, note_id: UUID | str, payload: NoteUpdate) -> NoteRead | None:
         current = await self.get_note(note_id)
         if current is None:
             return None
 
         updates = payload.model_dump(exclude_unset=True)
+        expected_version = updates.pop("version", None)
+        if expected_version is not None and expected_version != current.version:
+            raise ValueError("version_conflict")
         if not updates:
             return current
 
         for key, value in updates.items():
             setattr(current, key, value)
 
-        current.version += 1
         current.updated_at = utcnow()
+        current.version += 1
 
         async with aiosqlite.connect(self.sqlite_path) as connection:
             await connection.execute(
@@ -140,8 +152,8 @@ class DatabaseManager:
         }
 
     @staticmethod
-    def _row_to_note(row: aiosqlite.Row) -> Note:
-        return Note(
+    def _row_to_note(row: aiosqlite.Row) -> NoteRead:
+        return NoteRead(
             id=UUID(row["id"]),
             title=row["title"],
             content=row["content"],
@@ -150,6 +162,10 @@ class DatabaseManager:
             updated_at=datetime.fromisoformat(row["updated_at"]),
             version=row["version"],
         )
+
+    @staticmethod
+    def _note_to_read(note: Note) -> NoteRead:
+        return NoteRead.model_validate(note.model_dump())
 
 
 db = DatabaseManager()
