@@ -1,7 +1,7 @@
 """Shared auth helper — handles HTTP/2 lowercase header normalization."""
 import os
 
-MNEMO_API_KEY = os.environ.get("MNEMO_API_KEY", "")
+MNEMO_API_KEY = os.environ.get("MNEMO_API_KEY", "").strip()
 
 
 def check_auth(headers) -> bool:
