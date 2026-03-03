@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Placeholder from "@tiptap/extension-placeholder";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -10,22 +10,6 @@ type NoteDraft = {
   title: string;
   content: string;
 };
-
-function statusLabel(state: "idle" | "saving" | "saved" | "error") {
-  if (state === "saving") {
-    return "Saving...";
-  }
-
-  if (state === "saved") {
-    return "Saved";
-  }
-
-  if (state === "error") {
-    return "Save failed";
-  }
-
-  return "Unsaved changes";
-}
 
 function normalizeContent(content: string) {
   return content.trim() ? content : "<p></p>";
@@ -62,6 +46,71 @@ export function NoteEditor() {
     },
   });
 
+  const buildDraft = useCallback(() => {
+    if (!note) {
+      return null;
+    }
+
+    return {
+      title,
+      content: editor?.getHTML() ?? normalizeContent(note.content),
+    };
+  }, [title, editor, note]);
+
+  const saveNote = useCallback(
+    (nextDraft: NoteDraft | null) => {
+      if (!note || !nextDraft) {
+        return;
+      }
+
+      const normalizedServerContent = normalizeContent(note.content);
+      if (
+        nextDraft.title === note.title &&
+        nextDraft.content === normalizedServerContent
+      ) {
+        setSavingState("saved");
+        return;
+      }
+
+      setSavingState("saving");
+      updateNote.mutate(
+        {
+          noteId: note.id,
+          payload: {
+            ...nextDraft,
+            version: note.version,
+          },
+        },
+        {
+          onSuccess: (updatedNote) => {
+            setTitle(updatedNote.title);
+            setDraft({
+              title: updatedNote.title,
+              content: normalizeContent(updatedNote.content),
+            });
+            setSavingState("saved");
+          },
+          onError: () => {
+            setSavingState("error");
+          },
+        },
+      );
+    },
+    [note, updateNote, setSavingState],
+  );
+
+  const handleSave = useCallback(() => {
+    if (saveTimerRef.current !== null) {
+      window.clearTimeout(saveTimerRef.current);
+    }
+
+    const nextDraft = buildDraft();
+    if (nextDraft) {
+      setDraft(nextDraft);
+    }
+    saveNote(nextDraft);
+  }, [buildDraft, saveNote]);
+
   useEffect(() => {
     if (!editor || !note) {
       if (editor && !note) {
@@ -84,6 +133,20 @@ export function NoteEditor() {
   }, [editor, note, setSavingState]);
 
   useEffect(() => {
+    if (savingState !== "saved") {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setSavingState("idle");
+    }, 2000);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [savingState, setSavingState]);
+
+  useEffect(() => {
     if (!note || !draft) {
       return;
     }
@@ -93,35 +156,7 @@ export function NoteEditor() {
     }
 
     saveTimerRef.current = window.setTimeout(() => {
-      const normalizedServerContent = normalizeContent(note.content);
-      if (draft.title === note.title && draft.content === normalizedServerContent) {
-        setSavingState("saved");
-        return;
-      }
-
-      setSavingState("saving");
-      updateNote.mutate(
-        {
-          noteId: note.id,
-          payload: {
-            ...draft,
-            version: note.version,
-          },
-        },
-        {
-          onSuccess: (updatedNote) => {
-            setTitle(updatedNote.title);
-            setDraft({
-              title: updatedNote.title,
-              content: normalizeContent(updatedNote.content),
-            });
-            setSavingState("saved");
-          },
-          onError: () => {
-            setSavingState("error");
-          },
-        },
-      );
+      saveNote(draft);
     }, 1000);
 
     return () => {
@@ -129,17 +164,17 @@ export function NoteEditor() {
         window.clearTimeout(saveTimerRef.current);
       }
     };
-  }, [draft, note, updateNote, setSavingState]);
+  }, [draft, note, saveNote]);
 
   useEffect(() => {
     if (!note) {
       return;
     }
 
-    const nextDraft = {
-      title,
-      content: editor?.getHTML() ?? normalizeContent(note.content),
-    };
+    const nextDraft = buildDraft();
+    if (!nextDraft) {
+      return;
+    }
 
     setDraft((currentDraft) => {
       if (
@@ -155,7 +190,27 @@ export function NoteEditor() {
     if (title !== note.title) {
       setSavingState("idle");
     }
-  }, [title, editor, note, setSavingState]);
+  }, [title, editor, note, setSavingState, buildDraft]);
+
+  useEffect(() => {
+    if (!editor) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        handleSave();
+      }
+    };
+
+    const editorElement = editor.view.dom;
+    editorElement.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      editorElement.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [editor, handleSave]);
 
   if (isLoading) {
     return (
@@ -182,8 +237,32 @@ export function NoteEditor() {
           placeholder="Untitled"
           value={title}
         />
-        <div className="min-w-28 pt-2 text-right text-xs text-[#9b9b9b]">
-          {statusLabel(savingState)}
+        <div className="flex min-w-28 items-center justify-end gap-2 pt-2 text-right text-xs text-[#9b9b9b]">
+          {savingState === "saving" && (
+            <span className="text-sm text-gray-400">Saving...</span>
+          )}
+          {savingState === "saved" && (
+            <span className="text-sm text-green-500">Saved ✓</span>
+          )}
+          {savingState === "error" && (
+            <>
+              <span className="text-sm text-red-500">Save failed</span>
+              <button
+                className="rounded border border-red-200 px-2 py-1 text-xs text-red-500 transition-colors hover:border-red-300 hover:text-red-600"
+                onClick={handleSave}
+                type="button"
+              >
+                Retry
+              </button>
+            </>
+          )}
+          <button
+            onClick={handleSave}
+            className="rounded bg-gray-900 px-3 py-1 text-sm text-white transition-colors hover:bg-gray-700"
+            type="button"
+          >
+            Save
+          </button>
         </div>
       </div>
       <div className="flex-1 overflow-y-auto">
