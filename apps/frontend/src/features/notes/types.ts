@@ -66,6 +66,19 @@ export type DigestResponse = {
 
 export function getNoteCategory(tags: string[]): NoteCategory {
   const categoryTag = tags.find((tag) => tag.startsWith(CATEGORY_TAG_PREFIX));
-  const category = categoryTag?.slice(CATEGORY_TAG_PREFIX.length) ?? "기타";
-  return category || "기타";
+  const raw = categoryTag?.slice(CATEGORY_TAG_PREFIX.length) ?? "기타";
+  // strip subcategory: "투자/주식" → "투자"
+  return raw.split("/")[0] || "기타";
+}
+
+export function getNoteSubcategory(tags: string[]): string | null {
+  const categoryTag = tags.find((tag) => tag.startsWith(CATEGORY_TAG_PREFIX));
+  const raw = categoryTag?.slice(CATEGORY_TAG_PREFIX.length) ?? "";
+  const parts = raw.split("/");
+  return parts.length > 1 ? parts[1] : null;
+}
+
+export function buildCategoryTag(category: string, subcategory?: string): string {
+  if (subcategory?.trim()) return `${CATEGORY_TAG_PREFIX}${category}/${subcategory.trim()}`;
+  return `${CATEGORY_TAG_PREFIX}${category}`;
 }

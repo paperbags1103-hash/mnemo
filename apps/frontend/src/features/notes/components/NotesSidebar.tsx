@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Plus, Search, Trash2 } from "lucide-react";
 import { useCategories, useDeleteNote, useNotesList, useTags } from "@/features/notes/hooks/useNotes";
 import { useNotesStore } from "@/features/notes/store";
-import { getNoteCategory } from "@/features/notes/types";
+import { getNoteCategory, getNoteSubcategory } from "@/features/notes/types";
 import { cn } from "@/lib/utils";
 import type { Note } from "@/features/notes/types";
 
@@ -35,14 +35,15 @@ function timeAgo(iso: string) {
 
 // ── Single note row ──────────────────────────────────────
 function NoteRow({
-  note, isSelected, onSelect, onDelete, catColor,
+  note, isSelected, onSelect, onDelete, catColor, indent = false,
 }: {
   note: Note; isSelected: boolean; onSelect: () => void;
-  onDelete: () => void; catColor: string;
+  onDelete: () => void; catColor: string; indent?: boolean;
 }) {
   return (
     <div className={cn(
-      "group flex items-center border-l-2 px-3 py-2.5 transition-colors",
+      "group flex items-center border-l-2 py-2.5 transition-colors",
+      indent ? "px-3 pl-8" : "px-3",
       isSelected ? "border-l-[#1a1a1a] bg-[#efefed]" : "border-l-transparent hover:bg-[#f0f0ee]"
     )}>
       <button className="min-w-0 flex-1 text-left" onClick={onSelect}>
@@ -62,6 +63,39 @@ function NoteRow({
 }
 
 // ── Category section (collapsible) ──────────────────────
+function SubcategorySection({
+  name, notes, selectedNoteId, onSelect, onDelete, catColor,
+}: {
+  name: string; notes: Note[]; selectedNoteId: string | null;
+  onSelect: (id: string) => void; onDelete: (id: string) => void; catColor: string;
+}) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex w-full items-center gap-1.5 pl-6 pr-3 py-1 text-left hover:bg-[#f0f0ee] transition-colors"
+      >
+        <span className="h-1.5 w-1.5 rounded-full border" style={{ borderColor: catColor }} />
+        <span className="flex-1 text-[9.5px] font-medium text-[#8b8b89]">{name}</span>
+        <span className="text-[8px] text-[#c5c5c3]">{notes.length}</span>
+        {open ? <ChevronDown size={9} className="text-[#c5c5c3]" /> : <ChevronRight size={9} className="text-[#c5c5c3]" />}
+      </button>
+      {open && notes.map(note => (
+        <NoteRow
+          key={note.id}
+          note={note}
+          isSelected={note.id === selectedNoteId}
+          onSelect={() => onSelect(note.id)}
+          onDelete={() => onDelete(note.id)}
+          catColor={catColor}
+          indent
+        />
+      ))}
+    </div>
+  );
+}
+
 function CategorySection({
   name, notes, selectedNoteId, onSelect, onDelete, color,
 }: {
@@ -69,6 +103,26 @@ function CategorySection({
   onSelect: (id: string) => void; onDelete: (id: string) => void; color: string;
 }) {
   const [open, setOpen] = useState(true);
+
+  // group by subcategory
+  const subGroups = useMemo(() => {
+    const map = new Map<string, Note[]>();
+    const noSub: Note[] = [];
+    notes.forEach(note => {
+      const sub = getNoteSubcategory(note.tags ?? []);
+      if (sub) {
+        const arr = map.get(sub) ?? [];
+        arr.push(note);
+        map.set(sub, arr);
+      } else {
+        noSub.push(note);
+      }
+    });
+    return { subGroups: map, noSub };
+  }, [notes]);
+
+  const hasSubs = subGroups.subGroups.size > 0;
+
   return (
     <div>
       <button
@@ -82,16 +136,34 @@ function CategorySection({
           ? <ChevronDown size={10} className="text-[#ababaa]" />
           : <ChevronRight size={10} className="text-[#ababaa]" />}
       </button>
-      {open && notes.map(note => (
-        <NoteRow
-          key={note.id}
-          note={note}
-          isSelected={note.id === selectedNoteId}
-          onSelect={() => onSelect(note.id)}
-          onDelete={() => onDelete(note.id)}
-          catColor={color}
-        />
-      ))}
+      {open && (
+        <>
+          {/* Notes without subcategory */}
+          {subGroups.noSub.map(note => (
+            <NoteRow
+              key={note.id}
+              note={note}
+              isSelected={note.id === selectedNoteId}
+              onSelect={() => onSelect(note.id)}
+              onDelete={() => onDelete(note.id)}
+              catColor={color}
+              indent={hasSubs}
+            />
+          ))}
+          {/* Subcategory groups */}
+          {Array.from(subGroups.subGroups.entries()).map(([subName, subNotes]) => (
+            <SubcategorySection
+              key={subName}
+              name={subName}
+              notes={subNotes}
+              selectedNoteId={selectedNoteId}
+              onSelect={onSelect}
+              onDelete={onDelete}
+              catColor={color}
+            />
+          ))}
+        </>
+      )}
     </div>
   );
 }

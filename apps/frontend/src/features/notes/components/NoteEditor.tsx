@@ -10,7 +10,9 @@ import { useAddCategory, useCategories, useNote, useRemoveCategory, useUpdateNot
 import { useNotesStore } from "@/features/notes/store";
 import {
   DEFAULT_CATEGORIES,
+  buildCategoryTag,
   getNoteCategory,
+  getNoteSubcategory,
   type NoteCategory,
 } from "@/features/notes/types";
 
@@ -38,6 +40,7 @@ export function NoteEditor() {
   const categories = categoriesData?.categories ?? [...DEFAULT_CATEGORIES];
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<NoteCategory>("기타");
+  const [subcategory, setSubcategory] = useState("");
   const [enriching, setEnriching] = useState(false);
   const [showCatManager, setShowCatManager] = useState(false);
   const [newCatInput, setNewCatInput] = useState("");
@@ -61,15 +64,19 @@ export function NoteEditor() {
 
   const buildDraft = useCallback(() => {
     if (!note) return null;
-    return { title, content: editor?.getHTML() ?? normalizeContent(note.content), category };
+    // Rebuild tags: replace cat: tag with current category/subcategory, keep rest
+    const prevTags = (note.tags ?? []).filter((t: string) => !t.startsWith("cat:"));
+    const tags = [buildCategoryTag(category, subcategory), ...prevTags];
+    return { title, content: editor?.getHTML() ?? normalizeContent(note.content), category, tags };
   }, [category, title, editor, note]);
 
   const saveNote = useCallback(
-    (draft: { title: string; content: string; category: NoteCategory } | null) => {
+    (draft: { title: string; content: string; category: NoteCategory; tags?: string[] } | null) => {
       if (!note || !draft) return;
       const normalizedContent = normalizeContent(note.content);
       const currentCategory = getNoteCategory(note.tags);
-      if (draft.title === note.title && draft.content === normalizedContent && draft.category === currentCategory) {
+      const currentSubcategory = getNoteSubcategory(note.tags) ?? "";
+      if (draft.title === note.title && draft.content === normalizedContent && draft.category === currentCategory && subcategory === currentSubcategory) {
         setSavingState("saved");
         return;
       }
@@ -80,13 +87,14 @@ export function NoteEditor() {
           onSuccess: (updated) => {
             setTitle(updated.title);
             setCategory(getNoteCategory(updated.tags));
+            setSubcategory(getNoteSubcategory(updated.tags) ?? "");
             setSavingState("saved");
           },
           onError: () => setSavingState("error"),
         },
       );
     },
-    [note, updateNote, setSavingState],
+    [note, updateNote, setSavingState, subcategory],
   );
 
   const handleSave = useCallback(() => saveNote(buildDraft()), [buildDraft, saveNote]);
@@ -114,6 +122,7 @@ export function NoteEditor() {
     }
     setTitle(note.title);
     setCategory(getNoteCategory(note.tags));
+    setSubcategory(getNoteSubcategory(note.tags) ?? "");
     editor.commands.setContent(normalizeContent(note.content), false);
     setSavingState("saved");
   }, [editor, note, setSavingState]);
@@ -182,6 +191,15 @@ export function NoteEditor() {
             >
               {categories.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
+            {/* Subcategory input */}
+            <span className="text-[10px] text-[#d0d0ce]">/</span>
+            <input
+              type="text"
+              value={subcategory}
+              onChange={e => { setSubcategory(e.target.value); setSavingState("idle"); }}
+              placeholder="세부분류 (선택)"
+              className="bg-transparent text-xs text-[#9b9b9b] placeholder-[#d0d0ce] outline-none w-[80px] hover:text-[#1a1a1a] transition-colors"
+            />
             <button
               onClick={() => setShowCatManager(v => !v)}
               className="ml-1 text-[#d0d0ce] hover:text-[#9b9b9b] transition-colors"
