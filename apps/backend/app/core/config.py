@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     sqlite_path: str = "sqlite:///./mnemo.db"
     lorien_db_path: str = "~/.openclaw/workspace/.lorien/db"
     mnemo_api_key: str = Field(default="", env="MNEMO_API_KEY")
+    groq_api_key: str = Field(default="", env="GROQ_API_KEY")
 
     model_config = SettingsConfigDict(
         env_file=".env",

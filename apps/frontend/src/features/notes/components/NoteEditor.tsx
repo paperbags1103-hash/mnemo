@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import Placeholder from "@tiptap/extension-placeholder";
 import { EditorContent, useEditor } from "@tiptap/react";
+import { Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
+import { useQueryClient } from "@tanstack/react-query";
 import StarterKit from "@tiptap/starter-kit";
 import { useNote, useUpdateNote } from "@/features/notes/hooks/useNotes";
 import { useNotesStore } from "@/features/notes/store";
@@ -28,8 +31,10 @@ export function NoteEditor() {
   const { selectedNoteId, savingState, setSavingState } = useNotesStore();
   const { data: note, isLoading } = useNote(selectedNoteId);
   const updateNote = useUpdateNote();
+  const queryClient = useQueryClient();
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<NoteCategory>("기타");
+  const [enriching, setEnriching] = useState(false);
 
   const editor = useEditor({
     extensions: [
@@ -78,6 +83,22 @@ export function NoteEditor() {
   );
 
   const handleSave = useCallback(() => saveNote(buildDraft()), [buildDraft, saveNote]);
+
+  const handleEnrich = useCallback(async () => {
+    if (!note) return;
+    // Save first, then enrich
+    saveNote(buildDraft());
+    setEnriching(true);
+    try {
+      await api.post(`/api/v1/notes/${note.id}/enrich`);
+      await queryClient.invalidateQueries({ queryKey: ["note", note.id] });
+      await queryClient.invalidateQueries({ queryKey: ["notes"] });
+    } catch (e) {
+      console.error("Enrich failed", e);
+    } finally {
+      setEnriching(false);
+    }
+  }, [note, buildDraft, saveNote, queryClient]);
 
   // sync note → editor
   useEffect(() => {
@@ -182,6 +203,20 @@ export function NoteEditor() {
               {savingState === "error" && (
                 <button onClick={handleSave} className="text-red-400 underline text-[10px]">재시도</button>
               )}
+              <button
+                onClick={() => void handleEnrich()}
+                disabled={enriching}
+                className={cn(
+                  "flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors border",
+                  enriching
+                    ? "border-[#e0e0de] bg-[#f7f7f5] text-[#ababaa]"
+                    : "border-[#e0e0de] bg-[#f7f7f5] text-[#6b6b69] hover:border-[#1a1a1a] hover:text-[#1a1a1a]"
+                )}
+                title="AI가 요약+분류+태그를 자동으로 채워줍니다"
+              >
+                <Sparkles size={11} />
+                {enriching ? "처리 중..." : "AI"}
+              </button>
               <button
                 onClick={handleSave}
                 className={cn(
