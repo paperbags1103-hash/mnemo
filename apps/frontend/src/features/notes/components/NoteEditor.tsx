@@ -105,7 +105,7 @@ export function NoteEditor() {
     setEnriching(true);
     try {
       await api.post(`/api/v1/notes/${note.id}/request-enrich`);
-      // Status is now "pending" — 치레 will process on next heartbeat
+      // Status is now "pending" — AI agent will process on next heartbeat
     } catch (e) {
       console.error("Enrich request failed", e);
     } finally {
@@ -287,7 +287,7 @@ export function NoteEditor() {
                     ? "border-[#e0e0de] bg-[#f7f7f5] text-[#ababaa]"
                     : "border-[#e0e0de] bg-[#f7f7f5] text-[#6b6b69] hover:border-[#1a1a1a] hover:text-[#1a1a1a]"
                 )}
-                title="치레가 요약+분류+태그를 자동으로 채워줍니다 (5~10분)"
+                title="AI가 요약·분류·태그를 자동으로 채워줍니다 (5~10분)"
               >
                 <Sparkles size={11} />
                 {enriching ? "요청 중..." : "AI"}

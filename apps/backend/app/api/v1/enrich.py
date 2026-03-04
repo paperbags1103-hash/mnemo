@@ -1,11 +1,11 @@
 """
 Enrichment job queue — no LLM in backend.
-치레(Claude/OpenClaw) polls pending jobs and does the actual extraction.
+AI agent polls pending jobs and does the actual extraction.
 
 Endpoints:
   POST /api/v1/notes/{id}/request-enrich   → mark note as pending
-  GET  /api/v1/notes/enrichment/pending    → list pending notes (for 치레)
-  POST /api/v1/notes/{id}/enrichment       → 치레 submits result (updates note)
+  GET  /api/v1/notes/enrichment/pending    → list pending notes (for AI agent)
+  POST /api/v1/notes/{id}/enrichment       → AI agent submits result (updates note)
 """
 
 import re
@@ -31,7 +31,7 @@ class EnrichResult(BaseModel):
 
 @router.post("/notes/{note_id}/request-enrich")
 async def request_enrich(note_id: str):
-    """User clicks ✨ AI button → marks note as pending for 치레 to process."""
+    """User clicks ✨ AI button → marks note as pending for AI agent to process."""
     note = await db.get_note(note_id)
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
@@ -44,7 +44,7 @@ async def request_enrich(note_id: str):
 
 @router.get("/notes/enrichment/pending")
 async def list_pending(limit: int = 10):
-    """치레 polls this endpoint during heartbeat to find notes needing enrichment."""
+    """AI agent polls this endpoint during heartbeat to find notes needing enrichment."""
     pending = await db.list_pending_enrichments(limit=limit)
     # Strip HTML from content for LLM consumption
     for item in pending:
@@ -54,7 +54,7 @@ async def list_pending(limit: int = 10):
 
 @router.post("/notes/{note_id}/enrichment", dependencies=[Depends(verify_api_key)])
 async def submit_enrichment(note_id: str, result: EnrichResult):
-    """치레 submits enrichment result → updates note title/tags/content."""
+    """AI agent submits enrichment result → updates note title/tags/content."""
     note = await db.get_note(note_id)
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")

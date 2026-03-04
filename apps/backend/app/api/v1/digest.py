@@ -12,7 +12,7 @@ async def get_digest(
 ):
     raw = await db.get_digest(hours=hours, limit=limit)
 
-    # Group by source (치레, manual, etc.) for frontend
+    # Group by source (agent, manual, etc.) for frontend
     source_map: dict[str, list] = {}
     for note in raw["notes"]:
         src = note.get("source") or "manual"
