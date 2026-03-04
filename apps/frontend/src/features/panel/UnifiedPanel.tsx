@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2, PanelRightClose } from "lucide-react";
 import { api } from "@/lib/api";
 import { useNotesStore } from "@/features/notes/store";
+import { useNotesList } from "@/features/notes/hooks/useNotes";
 import {
   useKnowledgeGraph,
   useNoteEntities,
@@ -130,7 +131,56 @@ function usePendingLinks(noteId: string | null) {
 }
 
 // ── Main ───────────────────────────────────────────────
-export function UnifiedPanel({ noteId }: { noteId: string | null }) {
+// ── Activity heatmap (last 7 weeks) ────────────────────
+function ActivityHeatmap() {
+  const { data: notes = [] } = useNotesList();
+  const cells = useMemo(() => {
+    const today = new Date();
+    const days: { date: string; count: number }[] = [];
+    for (let i = 48; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      days.push({ date: key, count: 0 });
+    }
+    notes.forEach(n => {
+      const key = n.created_at?.slice(0, 10);
+      const cell = days.find(d => d.date === key);
+      if (cell) cell.count++;
+    });
+    return days;
+  }, [notes]);
+
+  const maxCount = Math.max(1, ...cells.map(c => c.count));
+  const weeks: typeof cells[] = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+
+  return (
+    <div className="px-4 py-3">
+      <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[#ababaa]">활동</p>
+      <div className="flex gap-[3px]">
+        {weeks.map((week, wi) => (
+          <div key={wi} className="flex flex-col gap-[3px]">
+            {week.map((cell, di) => {
+              const opacity = cell.count === 0 ? 0.08 : 0.2 + (cell.count / maxCount) * 0.8;
+              return (
+                <div
+                  key={di}
+                  title={`${cell.date}: ${cell.count}개`}
+                  className="h-[9px] w-[9px] rounded-[2px]"
+                  style={{ background: `rgba(37,99,235,${opacity})` }}
+                />
+              );
+            })}
+          </div>
+        ))}
+      </div>
+      <p className="mt-1.5 text-[9px] text-[#ababaa]">최근 7주 노트 생성</p>
+    </div>
+  );
+}
+
+export function UnifiedPanel({ noteId, onHide }: { noteId: string | null; onHide?: () => void }) {
   const { setSelectedNoteId } = useNotesStore();
   const queryClient = useQueryClient();
 
@@ -162,7 +212,16 @@ export function UnifiedPanel({ noteId }: { noteId: string | null }) {
   })();
 
   return (
-    <aside className="flex w-[260px] shrink-0 flex-col overflow-y-auto border-l border-[#ebebea] bg-[#f9f9f7]">
+    <aside className="flex w-full h-full shrink-0 flex-col overflow-y-auto border-l border-[#ebebea] bg-[#f9f9f7]">
+      {/* Header with hide button */}
+      <div className="flex items-center justify-between border-b border-[#ebebea] px-3 py-2">
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-[#ababaa]">Panel</span>
+        {onHide && (
+          <button onClick={onHide} title="패널 숨기기" className="text-[#ababaa] hover:text-[#1a1a1a] transition-colors">
+            <PanelRightClose size={13} />
+          </button>
+        )}
+      </div>
       {/* Ego graph */}
       {noteId ? (
         <EgoGraph noteId={noteId} />
@@ -237,9 +296,14 @@ export function UnifiedPanel({ noteId }: { noteId: string | null }) {
         </Section>
       )}
 
+      {/* Activity heatmap */}
+      <div className="border-t border-[#ebebea]">
+        <ActivityHeatmap />
+      </div>
+
       {/* Ingest footer */}
       {ingestJob && (
-        <div className="mt-auto border-t border-[#ebebea] px-4 py-2.5">
+        <div className="border-t border-[#ebebea] px-4 py-2.5">
           <p className="text-[9px] text-[#ababaa]">
             ⚙ ingest: {ingestJob.status}
             {ingestJob.updated_at && ` · ${new Date(ingestJob.updated_at).toLocaleTimeString("ko", { hour: "2-digit", minute: "2-digit" })}`}

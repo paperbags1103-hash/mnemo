@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode, useCallback, useEffect, useState } from "react";
-import { Columns2, FileText, LayoutList, Network } from "lucide-react";
+import { Columns2, FileText, LayoutList, Network, PanelRightOpen } from "lucide-react";
 import { NavLink, Route, Routes } from "react-router-dom";
 import { DigestPage } from "@/features/digest/DigestPage";
 import { GraphView } from "@/features/graph/components/GraphView";
@@ -63,6 +63,7 @@ function NotesScreen({ onCreateNote }: { onCreateNote: () => Promise<void> }) {
   const panelResize = useResize("mnemo-panel-width", 260, 180, 420, "left");
   const [centerMode, setCenterMode] = useState<"editor" | "graph" | "split">("editor");
   const splitResize = useResize("mnemo-split-width", 500, 200, 800, "right");
+  const [showPanel, setShowPanel] = useState(true);
   // splitResize stores px; we use it as flex-basis on the editor pane
 
   return (
@@ -120,11 +121,21 @@ function NotesScreen({ onCreateNote }: { onCreateNote: () => Promise<void> }) {
         </div>
       </div>
 
-      <ResizeHandle onMouseDown={panelResize.onMouseDown} />
+      {showPanel && <ResizeHandle onMouseDown={panelResize.onMouseDown} />}
       {/* Right panel */}
-      <div style={{ width: panelResize.size, flexShrink: 0 }}>
-        <UnifiedPanel noteId={selectedNoteId} />
-      </div>
+      {showPanel ? (
+        <div style={{ width: panelResize.size, flexShrink: 0 }}>
+          <UnifiedPanel noteId={selectedNoteId} onHide={() => setShowPanel(false)} />
+        </div>
+      ) : (
+        <button
+          onClick={() => setShowPanel(true)}
+          title="패널 열기"
+          className="flex w-8 shrink-0 items-center justify-center border-l border-[#e9e9e7] bg-[#f7f7f5] text-[#ababaa] hover:text-[#1a1a1a] transition-colors"
+        >
+          <PanelRightOpen size={14} />
+        </button>
+      )}
     </div>
   );
 }
