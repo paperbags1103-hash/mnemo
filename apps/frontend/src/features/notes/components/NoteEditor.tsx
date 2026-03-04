@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Placeholder from "@tiptap/extension-placeholder";
 import { EditorContent, useEditor } from "@tiptap/react";
-import { Plus, Sparkles, X } from "lucide-react";
+import { Plus, Settings2, Sparkles, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
@@ -68,7 +68,7 @@ export function NoteEditor() {
     const prevTags = (note.tags ?? []).filter((t: string) => !t.startsWith("cat:"));
     const tags = [buildCategoryTag(category, subcategory), ...prevTags];
     return { title, content: editor?.getHTML() ?? normalizeContent(note.content), category, tags };
-  }, [category, title, editor, note]);
+  }, [category, subcategory, title, editor, note]);
 
   const saveNote = useCallback(
     (draft: { title: string; content: string; category: NoteCategory; tags?: string[] } | null) => {
@@ -191,22 +191,24 @@ export function NoteEditor() {
             >
               {categories.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
-            {/* Subcategory input */}
-            <span className="text-[10px] text-[#d0d0ce]">/</span>
+            {/* Category manager gear icon */}
+            <button
+              onClick={() => setShowCatManager(v => !v)}
+              className="ml-0.5 text-[#d0d0ce] hover:text-[#9b9b9b] transition-colors"
+              title="카테고리 관리"
+            >
+              <Settings2 size={12} />
+            </button>
+            {/* Subcategory separator + input */}
+            <span className="ml-2 text-[10px] text-[#d0d0ce]">›</span>
             <input
               type="text"
               value={subcategory}
               onChange={e => { setSubcategory(e.target.value); setSavingState("idle"); }}
-              placeholder="세부분류 (선택)"
-              className="bg-transparent text-xs text-[#9b9b9b] placeholder-[#d0d0ce] outline-none w-[80px] hover:text-[#1a1a1a] transition-colors"
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); void saveNote(buildDraft()); } }}
+              placeholder="세부분류"
+              className="ml-1 bg-transparent text-xs text-[#9b9b9b] placeholder-[#d0d0ce] outline-none w-[72px] hover:text-[#1a1a1a] focus:text-[#1a1a1a] transition-colors"
             />
-            <button
-              onClick={() => setShowCatManager(v => !v)}
-              className="ml-1 text-[#d0d0ce] hover:text-[#9b9b9b] transition-colors"
-              title="카테고리 관리"
-            >
-              <Plus size={13} />
-            </button>
             {/* Category manager popover */}
             {showCatManager && (
               <div ref={catManagerRef} className="absolute top-7 left-0 z-50 w-56 rounded-xl border border-[#e9e9e7] bg-white shadow-lg p-3">
