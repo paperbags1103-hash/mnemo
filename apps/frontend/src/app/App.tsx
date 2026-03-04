@@ -1,201 +1,114 @@
-import { Component, type ErrorInfo, type ReactNode, useCallback, useEffect, useState } from "react";
-import { FileText, LayoutList, Network, Plus } from "lucide-react";
+import { Component, type ErrorInfo, type ReactNode, useCallback, useEffect } from "react";
+import { FileText, LayoutList, Network } from "lucide-react";
 import { NavLink, Route, Routes, useLocation } from "react-router-dom";
-import { Button } from "@/components/ui/button";
 import { DigestPage } from "@/features/digest/DigestPage";
 import { GraphView } from "@/features/graph/components/GraphView";
-import { KnowledgePanel } from "@/features/graph/components/KnowledgePanel";
 import { NoteEditor } from "@/features/notes/components/NoteEditor";
 import { NotesSidebar } from "@/features/notes/components/NotesSidebar";
+import { UnifiedPanel } from "@/features/panel/UnifiedPanel";
 import { useCreateNote } from "@/features/notes/hooks/useNotes";
 import { useNotesStore } from "@/features/notes/store";
 import { cn } from "@/lib/utils";
 
-function useDefaultKnowledgePanelOpen(noteId: string | null) {
-  const [isOpen, setIsOpen] = useState(() =>
-    typeof window !== "undefined" ? window.innerWidth >= 1280 : true,
-  );
-
-  useEffect(() => {
-    if (!noteId) {
-      setIsOpen(false);
-      return;
-    }
-
-    const syncWithViewport = () => {
-      setIsOpen(window.innerWidth >= 1280);
-    };
-
-    syncWithViewport();
-    window.addEventListener("resize", syncWithViewport);
-    return () => window.removeEventListener("resize", syncWithViewport);
-  }, [noteId]);
-
-  return [isOpen, setIsOpen] as const;
-}
-
+// ── Icon nav ───────────────────────────────────────────
 function SidebarNav() {
-  const location = useLocation();
-
   return (
-    <aside className="flex h-full w-16 flex-col justify-between border-r border-[#e9e9e7] bg-[#f7f7f5] px-2 py-3">
-      <div className="space-y-2">
-        <div className="flex h-10 items-center justify-center rounded-xl border border-[#e9e9e7] bg-[#ffffff] text-[11px] font-semibold uppercase tracking-[0.24em] text-[#1a1a1a]">
+    <aside className="flex h-full w-14 shrink-0 flex-col items-center justify-between border-r border-[#e9e9e7] bg-[#f7f7f5] py-4">
+      <div className="flex flex-col items-center gap-1">
+        {/* Logo */}
+        <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-lg bg-[#1a1a1a] text-[11px] font-bold text-white tracking-wider">
           m
         </div>
-        <NavLink
-          className={({ isActive }) =>
-            cn(
-              "flex h-10 items-center justify-center rounded-xl border border-transparent text-[#9b9b9b] transition-colors hover:bg-[#efefed] hover:text-[#1a1a1a]",
-              isActive && "border-[#e9e9e7] bg-[#ffffff] text-[#1a1a1a]",
-            )
-          }
-          end
-          title="Notes"
-          to="/"
-        >
-          <FileText className="h-4 w-4" />
+        <NavLink to="/" end title="Notes"
+          className={({ isActive }) => cn(
+            "flex h-9 w-9 items-center justify-center rounded-lg text-[#9b9b9b] transition-colors hover:bg-[#ebebea] hover:text-[#1a1a1a]",
+            isActive && "bg-[#ebebea] text-[#1a1a1a]"
+          )}>
+          <FileText size={16} />
         </NavLink>
-        <NavLink
-          className={({ isActive }) =>
-            cn(
-              "flex h-10 items-center justify-center rounded-xl border border-transparent text-[#9b9b9b] transition-colors hover:bg-[#efefed] hover:text-[#1a1a1a]",
-              isActive && "border-[#e9e9e7] bg-[#ffffff] text-[#1a1a1a]",
-            )
-          }
-          title="Digest"
-          to="/digest"
-        >
-          <LayoutList className="h-4 w-4" />
+        <NavLink to="/digest" title="Digest"
+          className={({ isActive }) => cn(
+            "flex h-9 w-9 items-center justify-center rounded-lg text-[#9b9b9b] transition-colors hover:bg-[#ebebea] hover:text-[#1a1a1a]",
+            isActive && "bg-[#ebebea] text-[#1a1a1a]"
+          )}>
+          <LayoutList size={16} />
+        </NavLink>
+        <NavLink to="/graph" title="Full graph"
+          className={({ isActive }) => cn(
+            "flex h-9 w-9 items-center justify-center rounded-lg text-[#9b9b9b] transition-colors hover:bg-[#ebebea] hover:text-[#1a1a1a]",
+            isActive && "bg-[#ebebea] text-[#1a1a1a]"
+          )}>
+          <Network size={16} />
         </NavLink>
       </div>
-      <NavLink
-        className={({ isActive }) =>
-          cn(
-            "flex h-10 items-center justify-center rounded-xl border border-transparent text-[#9b9b9b] transition-colors hover:bg-[#efefed] hover:text-[#1a1a1a]",
-            isActive && "border-[#e9e9e7] bg-[#ffffff] text-[#1a1a1a]",
-          )
-        }
-        title={location.pathname === "/graph" ? "Graph view" : "Graph"}
-        to="/graph"
-      >
-        <Network className="h-4 w-4" />
-      </NavLink>
     </aside>
   );
 }
 
+// ── Notes screen ───────────────────────────────────────
 function NotesScreen({ onCreateNote }: { onCreateNote: () => Promise<void> }) {
   const { selectedNoteId } = useNotesStore();
-  const [isPanelOpen, setIsPanelOpen] = useDefaultKnowledgePanelOpen(selectedNoteId);
-
   return (
-    <section className="flex min-w-0 flex-1 flex-col">
-      <header className="flex h-14 items-center justify-between border-b border-[#e9e9e7] bg-[#ffffff] px-6">
-        <h1 className="text-lg font-bold tracking-[0.08em] text-[#1a1a1a]">mnemo</h1>
-        <Button
-          className="gap-2 border border-[#e9e9e7] bg-[#f0f0ee] text-[#1a1a1a] hover:bg-[#e9e9e7]"
-          onClick={() => void onCreateNote()}
-          type="button"
-        >
-          <Plus className="h-4 w-4" />
-          New Note
-        </Button>
-      </header>
-      <main className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="min-w-0 flex-1">
-          <NoteEditor />
-        </div>
-        {selectedNoteId ? (
-          <KnowledgePanel
-            isCollapsed={!isPanelOpen}
-            noteId={selectedNoteId}
-            onToggle={() => setIsPanelOpen((current) => !current)}
-          />
-        ) : null}
-      </main>
-    </section>
+    <div className="flex min-w-0 flex-1 overflow-hidden">
+      <NotesSidebar onCreateNote={() => void onCreateNote()} />
+      <div className="min-w-0 flex-1 overflow-hidden">
+        <NoteEditor />
+      </div>
+      <UnifiedPanel noteId={selectedNoteId} />
+    </div>
   );
 }
 
-function GraphScreen() {
-  return (
-    <section className="flex min-w-0 flex-1 flex-col">
-      <GraphView />
-    </section>
-  );
-}
-
+// ── Error boundary ─────────────────────────────────────
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   state = { hasError: false };
-
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-
-  componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error(error, info);
-  }
-
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(error: Error, info: ErrorInfo) { console.error(error, info); }
   render() {
-    if (this.state.hasError) {
-      return (
-        <div className="flex h-screen items-center justify-center text-[#9b9b9b]">
-          <div className="text-center">
-            <p className="text-lg font-medium text-[#1a1a1a]">Something went wrong</p>
-            <button
-              className="mt-2 text-sm underline"
-              onClick={() => this.setState({ hasError: false })}
-              type="button"
-            >
-              Try again
-            </button>
-          </div>
+    if (this.state.hasError) return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-center">
+          <p className="font-medium text-[#1a1a1a]">오류가 발생했습니다</p>
+          <button className="mt-2 text-sm underline text-[#9b9b9b]" onClick={() => this.setState({ hasError: false })}>
+            다시 시도
+          </button>
         </div>
-      );
-    }
-
+      </div>
+    );
     return this.props.children;
   }
 }
 
+// ── App ────────────────────────────────────────────────
 export function App() {
   const { setSelectedNoteId, setSavingState } = useNotesStore();
   const createNote = useCreateNote();
-  const location = useLocation();
 
   const handleCreateNote = useCallback(async () => {
-    const created = await createNote.mutateAsync({
-      title: "Untitled",
-      content: "<p></p>",
-      category: "기타",
-    });
-
+    const created = await createNote.mutateAsync({ title: "제목 없음", content: "<p></p>", category: "기타" });
     setSelectedNoteId(created.id);
     setSavingState("saved");
   }, [createNote, setSelectedNoteId, setSavingState]);
 
   useEffect(() => {
-    function handleKeydown(event: KeyboardEvent) {
-      if (event.metaKey && event.key.toLowerCase() === "n") {
-        event.preventDefault();
+    const handler = (e: KeyboardEvent) => {
+      if (e.metaKey && e.key.toLowerCase() === "n") {
+        e.preventDefault();
         void handleCreateNote();
       }
-    }
-
-    window.addEventListener("keydown", handleKeydown);
-    return () => window.removeEventListener("keydown", handleKeydown);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
   }, [handleCreateNote]);
 
   return (
     <ErrorBoundary>
       <div className="flex h-screen overflow-hidden bg-[#ffffff] text-[#1a1a1a]">
         <SidebarNav />
-        {location.pathname === "/" ? <NotesSidebar /> : null}
         <Routes>
-          <Route element={<NotesScreen onCreateNote={handleCreateNote} />} path="/" />
-          <Route element={<DigestPage />} path="/digest" />
-          <Route element={<GraphScreen />} path="/graph" />
+          <Route path="/" element={<NotesScreen onCreateNote={handleCreateNote} />} />
+          <Route path="/digest" element={<DigestPage />} />
+          <Route path="/graph" element={<div className="flex min-w-0 flex-1 flex-col"><GraphView /></div>} />
         </Routes>
       </div>
     </ErrorBoundary>

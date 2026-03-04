@@ -1,76 +1,44 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Placeholder from "@tiptap/extension-placeholder";
-import { useQuery } from "@tanstack/react-query";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { Input } from "@/components/ui/input";
-import { useNote, useNoteLinks, useUpdateNote } from "@/features/notes/hooks/useNotes";
+import { useNote, useUpdateNote } from "@/features/notes/hooks/useNotes";
 import { useNotesStore } from "@/features/notes/store";
-import { BacklinksPanel } from "@/features/notes/components/BacklinksPanel";
 import {
   NOTE_CATEGORIES,
   getNoteCategory,
-  type Note,
   type NoteCategory,
 } from "@/features/notes/types";
-import { api } from "@/lib/api";
+
+const CAT_COLORS: Record<string, string> = {
+  투자: "#2563eb", 기술: "#7c3aed", 문화: "#d97706",
+  여행: "#059669", 일기: "#db2777", 기타: "#6b7280",
+};
 
 function normalizeContent(content: string) {
   return content.trim() ? content : "<p></p>";
 }
 
-function linkLabel(kind: "backlink" | "outlink", title: string) {
-  return kind === "backlink" ? `\u2190 From: ${title}` : `\u2192 To: ${title}`;
+function formatDate(iso: string) {
+  return new Intl.DateTimeFormat("ko", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
 }
 
 export function NoteEditor() {
-  const { selectedNoteId, savingState, setSavingState, setSelectedNoteId } = useNotesStore();
+  const { selectedNoteId, savingState, setSavingState } = useNotesStore();
   const { data: note, isLoading } = useNote(selectedNoteId);
-  const { data: links } = useNoteLinks(selectedNoteId);
   const updateNote = useUpdateNote();
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<NoteCategory>("기타");
 
-  const linkedNoteIds = useMemo(() => {
-    if (!links) {
-      return [];
-    }
-
-    return Array.from(
-      new Set([
-        ...links.backlinks.map((entry) => entry.note_id),
-        ...links.outlinks.map((entry) => entry.note_id),
-      ]),
-    );
-  }, [links]);
-
-  const { data: linkedNotes = {} } = useQuery<Record<string, Note>>({
-    queryKey: ["notes", selectedNoteId, "linked-note-titles", linkedNoteIds],
-    enabled: linkedNoteIds.length > 0,
-    queryFn: async () => {
-      const entries = await Promise.all(
-        linkedNoteIds.map(async (noteId) => {
-          const linkedNote = await api.get<Note>(`/api/v1/notes/${noteId}`);
-          return [noteId, linkedNote] as const;
-        }),
-      );
-
-      return Object.fromEntries(entries);
-    },
-  });
-
   const editor = useEditor({
     extensions: [
       StarterKit,
-      Placeholder.configure({
-        placeholder: "Write something...",
-      }),
+      Placeholder.configure({ placeholder: "내용을 입력하세요..." }),
     ],
     content: "<p></p>",
     editorProps: {
       attributes: {
-        class:
-          "h-full min-h-full px-8 py-6 text-[15px] leading-7 text-[#1a1a1a] outline-none",
+        class: "min-h-[400px] outline-none text-[15px] leading-[1.8] text-[#1a1a1a] [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:mt-6 [&_h1]:mb-3 [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:mt-5 [&_h2]:mb-2 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:mt-4 [&_h3]:mb-1.5 [&_p]:mb-3 [&_ul]:pl-5 [&_ul]:mb-3 [&_li]:mb-1 [&_strong]:font-semibold [&_blockquote]:border-l-3 [&_blockquote]:border-[#e0e0de] [&_blockquote]:pl-4 [&_blockquote]:text-[#5a5a58] [&_blockquote]:italic [&_blockquote]:my-3 [&_hr]:border-[#e9e9e7] [&_hr]:my-6",
       },
     },
     onUpdate: () => {
@@ -79,239 +47,148 @@ export function NoteEditor() {
   });
 
   const buildDraft = useCallback(() => {
-    if (!note) {
-      return null;
-    }
-
-    return {
-      title,
-      content: editor?.getHTML() ?? normalizeContent(note.content),
-      category,
-    };
+    if (!note) return null;
+    return { title, content: editor?.getHTML() ?? normalizeContent(note.content), category };
   }, [category, title, editor, note]);
 
   const saveNote = useCallback(
-    (nextDraft: { title: string; content: string; category: NoteCategory } | null) => {
-      if (!note || !nextDraft) {
-        return;
-      }
-
-      const normalizedServerContent = normalizeContent(note.content);
+    (draft: { title: string; content: string; category: NoteCategory } | null) => {
+      if (!note || !draft) return;
+      const normalizedContent = normalizeContent(note.content);
       const currentCategory = getNoteCategory(note.tags);
-      if (
-        nextDraft.title === note.title &&
-        nextDraft.content === normalizedServerContent &&
-        nextDraft.category === currentCategory
-      ) {
+      if (draft.title === note.title && draft.content === normalizedContent && draft.category === currentCategory) {
         setSavingState("saved");
         return;
       }
-
       setSavingState("saving");
       updateNote.mutate(
+        { noteId: note.id, payload: { ...draft, version: note.version } },
         {
-          noteId: note.id,
-          payload: {
-            ...nextDraft,
-            version: note.version,
-          },
-        },
-        {
-          onSuccess: (updatedNote) => {
-            setTitle(updatedNote.title);
-            setCategory(getNoteCategory(updatedNote.tags));
+          onSuccess: (updated) => {
+            setTitle(updated.title);
+            setCategory(getNoteCategory(updated.tags));
             setSavingState("saved");
           },
-          onError: () => {
-            setSavingState("error");
-          },
+          onError: () => setSavingState("error"),
         },
       );
     },
     [note, updateNote, setSavingState],
   );
 
-  const handleSave = useCallback(() => {
-    const nextDraft = buildDraft();
-    saveNote(nextDraft);
-  }, [buildDraft, saveNote]);
+  const handleSave = useCallback(() => saveNote(buildDraft()), [buildDraft, saveNote]);
 
+  // sync note → editor
   useEffect(() => {
     if (!editor || !note) {
-      if (editor && !note) {
-        editor.commands.setContent("<p></p>", false);
-      }
-      setTitle("");
-      setCategory("기타");
-      setSavingState("idle");
+      if (editor && !note) editor.commands.setContent("<p></p>", false);
+      setTitle(""); setCategory("기타"); setSavingState("idle");
       return;
     }
-
-    const nextContent = normalizeContent(note.content);
     setTitle(note.title);
     setCategory(getNoteCategory(note.tags));
-    editor.commands.setContent(nextContent, false);
+    editor.commands.setContent(normalizeContent(note.content), false);
     setSavingState("saved");
   }, [editor, note, setSavingState]);
 
+  // saved → idle after 2s
   useEffect(() => {
-    if (savingState !== "saved") {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      setSavingState("idle");
-    }, 2000);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
+    if (savingState !== "saved") return;
+    const t = window.setTimeout(() => setSavingState("idle"), 2000);
+    return () => window.clearTimeout(t);
   }, [savingState, setSavingState]);
 
+  // dirty tracking
   useEffect(() => {
-    if (!note) {
-      return;
-    }
-
-    const nextDraft = buildDraft();
-    if (!nextDraft) {
-      return;
-    }
-
-    const hasChanges =
-      nextDraft.title !== note.title ||
-      nextDraft.content !== normalizeContent(note.content) ||
-      category !== getNoteCategory(note.tags);
-
-    setSavingState(hasChanges ? "idle" : "saved");
+    if (!note) return;
+    const draft = buildDraft();
+    if (!draft) return;
+    const dirty = draft.title !== note.title || draft.content !== normalizeContent(note.content) || category !== getNoteCategory(note.tags);
+    setSavingState(dirty ? "idle" : "saved");
   }, [title, category, editor, note, setSavingState, buildDraft]);
 
+  // Cmd+S
   useEffect(() => {
-    if (!editor) {
-      return;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
-        event.preventDefault();
+    if (!editor) return;
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
         handleSave();
       }
     };
-
-    const editorElement = editor.view.dom;
-    editorElement.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      editorElement.removeEventListener("keydown", handleKeyDown);
-    };
+    editor.view.dom.addEventListener("keydown", handler);
+    return () => editor.view.dom.removeEventListener("keydown", handler);
   }, [editor, handleSave]);
 
   if (isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center bg-[#ffffff] text-sm text-[#9b9b9b]">
-        Loading note...
-      </div>
-    );
+    return <div className="flex h-full items-center justify-center bg-[#ffffff] text-sm text-[#9b9b9b]">Loading...</div>;
   }
 
   if (!note) {
     return (
-      <div className="flex h-full items-center justify-center bg-[#ffffff] text-sm text-[#9b9b9b]">
-        Select or create a note
+      <div className="flex h-full flex-col items-center justify-center gap-3 bg-[#ffffff]">
+        <div className="text-4xl">📝</div>
+        <p className="text-sm text-[#9b9b9b]">노트를 선택하거나 새로 만드세요</p>
+        <p className="text-xs text-[#b0b0ae]">Cmd+N</p>
       </div>
     );
   }
 
-  const backlinks = links?.backlinks ?? [];
-  const outlinks = links?.outlinks ?? [];
-  const hasLinks = backlinks.length > 0 || outlinks.length > 0;
+  const saveStatusText =
+    savingState === "saving" ? "저장 중..." :
+    savingState === "saved" ? "저장됨" :
+    savingState === "error" ? "저장 실패" :
+    "";
 
   return (
-    <section className="relative flex h-full overflow-hidden bg-[#ffffff]">
-    <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="flex items-start justify-between gap-4 border-b border-[#e9e9e7] px-8 py-5">
-        <Input
-          className="h-auto border-0 bg-transparent px-0 text-3xl font-semibold text-[#1a1a1a] shadow-none focus-visible:ring-0"
-          onChange={(event) => setTitle(event.target.value)}
-          placeholder="Untitled"
-          value={title}
-        />
-        <div className="flex min-w-28 items-center justify-end gap-2 pt-2 text-right text-xs text-[#9b9b9b]">
-          <select
-            className="h-9 rounded border border-[#e3e3e1] bg-[#ffffff] px-3 text-sm text-[#1a1a1a] outline-none transition-colors focus:border-[#d7d7d3]"
-            onChange={(event) => setCategory(event.target.value as NoteCategory)}
-            value={category}
-          >
-            {NOTE_CATEGORIES.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-          {savingState === "saving" && (
-            <span className="text-sm text-gray-400">Saving...</span>
-          )}
-          {savingState === "saved" && (
-            <span className="text-sm text-green-500">Saved ✓</span>
-          )}
-          {savingState === "error" && (
-            <>
-              <span className="text-sm text-red-500">Save failed</span>
-              <button
-                className="rounded border border-red-200 px-2 py-1 text-xs text-red-500 transition-colors hover:border-red-300 hover:text-red-600"
-                onClick={handleSave}
-                type="button"
-              >
-                Retry
-              </button>
-            </>
-          )}
-          <button
-            onClick={handleSave}
-            className="rounded bg-gray-900 px-3 py-1 text-sm text-white transition-colors hover:bg-gray-700"
-            type="button"
-          >
-            Save
-          </button>
+    <section className="flex h-full flex-col overflow-hidden bg-[#ffffff]">
+      {/* Document area */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-[720px] px-16 pt-14 pb-20">
+          {/* Category dot + selector */}
+          <div className="mb-4 flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full" style={{ background: CAT_COLORS[category] ?? "#6b7280" }} />
+            <select
+              value={category}
+              onChange={e => { setCategory(e.target.value as NoteCategory); setSavingState("idle"); }}
+              className="bg-transparent text-xs text-[#9b9b9b] outline-none cursor-pointer hover:text-[#1a1a1a] transition-colors"
+            >
+              {NOTE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+
+          {/* Title — document style */}
+          <input
+            type="text"
+            value={title}
+            onChange={e => { setTitle(e.target.value); setSavingState("idle"); }}
+            placeholder="제목 없음"
+            className="mb-3 w-full bg-transparent text-[36px] font-bold leading-tight tracking-[-0.02em] text-[#1a1a1a] outline-none placeholder:text-[#d0d0ce]"
+          />
+
+          {/* Meta row */}
+          <div className="mb-8 flex items-center gap-2 text-[11px] text-[#ababaa]">
+            {note.source && <span>{note.source}</span>}
+            {note.source && <span>·</span>}
+            <span>{formatDate(note.updated_at)}</span>
+            {saveStatusText && (
+              <>
+                <span>·</span>
+                <span className={savingState === "error" ? "text-red-400" : "text-[#ababaa]"}>{saveStatusText}</span>
+                {savingState === "error" && (
+                  <button onClick={handleSave} className="text-red-400 underline">재시도</button>
+                )}
+              </>
+            )}
+            <span className="ml-auto text-[10px] text-[#d0d0ce]">Cmd+S</span>
+          </div>
+
+          <div className="border-t border-[#f0f0ed] mb-8" />
+
+          {/* TipTap editor */}
+          <EditorContent editor={editor} />
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto">
-        <EditorContent editor={editor} />
-        {hasLinks ? (
-          <section className="mx-8 mb-8 border-t border-[#e9e9e7] pt-5">
-            <div className="flex items-center gap-2 text-sm font-medium text-[#1a1a1a]">
-              <span>Links</span>
-              <span className="text-xs font-normal text-[#9b9b9b]">
-                ({backlinks.length} backlinks, {outlinks.length} outlinks)
-              </span>
-            </div>
-            <div className="mt-3 space-y-1">
-              {backlinks.map((entry) => (
-                <button
-                  key={`backlink-${entry.note_id}`}
-                  className="block text-sm text-[#5f6f86] transition-colors hover:text-[#1a1a1a]"
-                  onClick={() => setSelectedNoteId(entry.note_id)}
-                  type="button"
-                >
-                  {linkLabel("backlink", linkedNotes[entry.note_id]?.title || "Untitled")}
-                </button>
-              ))}
-              {outlinks.map((entry) => (
-                <button
-                  key={`outlink-${entry.note_id}`}
-                  className="block text-sm text-[#5f6f86] transition-colors hover:text-[#1a1a1a]"
-                  onClick={() => setSelectedNoteId(entry.note_id)}
-                  type="button"
-                >
-                  {linkLabel("outlink", linkedNotes[entry.note_id]?.title || "Untitled")}
-                </button>
-              ))}
-            </div>
-          </section>
-        ) : null}
-      </div>
-    </div>
-    <BacklinksPanel noteId={selectedNoteId} />
     </section>
   );
 }
