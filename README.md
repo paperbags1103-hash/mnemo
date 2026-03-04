@@ -38,8 +38,10 @@ cp .env.example .env   # 필요 시 편집
 ### 프론트엔드 실행
 
 ```bash
-cd apps/frontend
+# 루트에서 의존성 설치 (workspace 구조)
 npm install --legacy-peer-deps
+
+cd apps/frontend
 npm run dev
 ```
 

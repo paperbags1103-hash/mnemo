@@ -35,7 +35,9 @@ class DatabaseManager:
                     tags TEXT NOT NULL DEFAULT '[]',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
-                    version INTEGER NOT NULL DEFAULT 1
+                    version INTEGER NOT NULL DEFAULT 1,
+                    source_ref TEXT,
+                    enrichment_status TEXT DEFAULT NULL
                 )
                 """
             )
@@ -90,6 +92,10 @@ class DatabaseManager:
             # add enrichment_status to note if missing
             try:
                 await connection.execute("ALTER TABLE note ADD COLUMN enrichment_status TEXT DEFAULT NULL")
+            except Exception:
+                pass
+            try:
+                await connection.execute("ALTER TABLE note ADD COLUMN source_ref TEXT")
                 await connection.commit()
             except Exception:
                 pass

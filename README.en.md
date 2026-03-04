@@ -43,8 +43,10 @@ cp .env.example .env          # edit if needed
 ### Frontend
 
 ```bash
-cd apps/frontend
+# Install from repo root (npm workspace)
 npm install --legacy-peer-deps
+
+cd apps/frontend
 npm run dev
 ```
 
