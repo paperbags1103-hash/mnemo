@@ -41,7 +41,7 @@ declare global {
         container: HTMLElement,
         data: { nodes: unknown; edges: unknown },
         options: Record<string, unknown>,
-      ) => { on: (e: string, cb: (p: { nodes: string[] }) => void) => void; destroy: () => void };
+      ) => { on: (e: string, cb: (p: { nodes: string[] }) => void) => void; destroy: () => void; selectNodes: (ids: string[]) => void; focus: (id: string, opts?: Record<string, unknown>) => void };
     };
   }
 }

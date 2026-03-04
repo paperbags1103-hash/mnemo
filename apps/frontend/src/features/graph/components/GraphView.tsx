@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LoaderCircle, Network } from "lucide-react";
 import { useKnowledgeGraph, type GraphNode } from "@/features/graph/hooks/useGraphData";
+import { useNotesStore } from "@/features/notes/store";
 
 declare global {
   interface Window {
@@ -10,10 +11,7 @@ declare global {
         container: HTMLElement,
         data: { nodes: unknown; edges: unknown },
         options: Record<string, unknown>,
-      ) => {
-        on: (event: string, callback: (params: { nodes: string[] }) => void) => void;
-        destroy: () => void;
-      };
+      ) => VisNetworkInstance;
     };
   }
 }
@@ -21,6 +19,8 @@ declare global {
 type VisNetworkInstance = {
   on: (event: string, callback: (params: { nodes: string[] }) => void) => void;
   destroy: () => void;
+  selectNodes: (ids: string[]) => void;
+  focus: (nodeId: string, options?: Record<string, unknown>) => void;
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -57,9 +57,11 @@ function loadVisNetwork() {
 
 export function GraphView({ compact = false }: { compact?: boolean }) {
   const { data, isLoading, isError } = useKnowledgeGraph();
+  const { selectedNoteId, setSelectedNoteId: setStoreNoteId } = useNotesStore();
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [networkError, setNetworkError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const networkRef = useRef<VisNetworkInstance | null>(null);
   const selectedNode = useMemo(
     () => data?.nodes.find((node) => node.id === selectedNodeId) ?? null,
     [data?.nodes, selectedNodeId],
@@ -145,8 +147,11 @@ export function GraphView({ compact = false }: { compact?: boolean }) {
           },
         );
         network.on("click", (params: { nodes: string[] }) => {
-          setSelectedNodeId(params.nodes[0] ?? null);
+          const nodeId = params.nodes[0] ?? null;
+          setSelectedNodeId(nodeId);
+          if (nodeId) setStoreNoteId(nodeId); // sync → note editor
         });
+        networkRef.current = network;
       })
       .catch((error: Error) => {
         setNetworkError(error.message);
@@ -155,14 +160,29 @@ export function GraphView({ compact = false }: { compact?: boolean }) {
     return () => {
       disposed = true;
       network?.destroy();
+      networkRef.current = null;
     };
-  }, [data]);
+  }, [data, setStoreNoteId]);
 
   useEffect(() => {
     if (!selectedNodeId && data?.nodes[0]) {
       setSelectedNodeId(data.nodes[0].id);
     }
   }, [data, selectedNodeId]);
+
+  // Sync: note editor → graph focus
+  useEffect(() => {
+    if (!selectedNoteId || !networkRef.current) return;
+    if (selectedNoteId === selectedNodeId) return; // already in sync
+    const nodeExists = data?.nodes.some(n => n.id === selectedNoteId);
+    if (!nodeExists) return;
+    setSelectedNodeId(selectedNoteId);
+    networkRef.current.selectNodes([selectedNoteId]);
+    networkRef.current.focus(selectedNoteId, {
+      animation: { duration: 400, easingFunction: "easeInOutQuad" },
+      scale: 1.2,
+    });
+  }, [selectedNoteId, selectedNodeId, data]);
 
   return (
     <>

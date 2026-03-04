@@ -28,7 +28,7 @@ declare global {
     vis?: {
       DataSet: new (items: unknown[]) => unknown;
       Network: new (c: HTMLElement, d: { nodes: unknown; edges: unknown }, o: Record<string, unknown>) => {
-        on: (e: string, cb: (p: { nodes: string[] }) => void) => void; destroy: () => void;
+        on: (e: string, cb: (p: { nodes: string[] }) => void) => void; destroy: () => void; selectNodes: (ids: string[]) => void; focus: (id: string, opts?: Record<string, unknown>) => void;
       };
     };
   }
