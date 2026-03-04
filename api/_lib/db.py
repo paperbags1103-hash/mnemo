@@ -39,6 +39,7 @@ def initialize():
             content TEXT NOT NULL DEFAULT '',
             folder_id TEXT,
             tags TEXT NOT NULL DEFAULT '[]',
+            source TEXT NOT NULL DEFAULT 'human',
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             version INTEGER NOT NULL DEFAULT 1
@@ -47,6 +48,11 @@ def initialize():
     )
     try:
         conn.execute("ALTER TABLE note ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'")
+        conn.commit()
+    except Exception:
+        pass
+    try:
+        conn.execute("ALTER TABLE note ADD COLUMN source TEXT DEFAULT 'human'")
         conn.commit()
     except Exception:
         pass
@@ -81,9 +87,10 @@ def _row_to_note(row) -> NoteRead:
             "content": row[2],
             "folder_id": row[3],
             "tags": row[4],
-            "created_at": row[5],
-            "updated_at": row[6],
-            "version": row[7],
+            "source": row[5],
+            "created_at": row[6],
+            "updated_at": row[7],
+            "version": row[8],
         }
 
     return NoteRead(
@@ -92,6 +99,7 @@ def _row_to_note(row) -> NoteRead:
         content=data["content"],
         folder_id=data["folder_id"],
         tags=json.loads(data["tags"] or "[]"),
+        source=data.get("source") or "human",
         created_at=datetime.fromisoformat(data["created_at"]),
         updated_at=datetime.fromisoformat(data["updated_at"]),
         version=int(data["version"]),
@@ -101,7 +109,7 @@ def _row_to_note(row) -> NoteRead:
 def list_notes(conn) -> list[NoteRead]:
     cur = conn.execute(
         """
-        SELECT id, title, content, folder_id, tags, created_at, updated_at, version
+        SELECT id, title, content, folder_id, tags, source, created_at, updated_at, version
         FROM note
         ORDER BY datetime(updated_at) DESC
         """
@@ -112,7 +120,7 @@ def list_notes(conn) -> list[NoteRead]:
 def get_note(conn, note_id: str) -> NoteRead | None:
     cur = conn.execute(
         """
-        SELECT id, title, content, folder_id, tags, created_at, updated_at, version
+        SELECT id, title, content, folder_id, tags, source, created_at, updated_at, version
         FROM note
         WHERE id = ?
         """,
@@ -127,10 +135,20 @@ def create_note(conn, payload: NoteCreate) -> NoteRead:
     note_id = str(uuid4())
     conn.execute(
         """
-        INSERT INTO note (id, title, content, folder_id, tags, created_at, updated_at, version)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO note (id, title, content, folder_id, tags, source, created_at, updated_at, version)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (note_id, payload.title, payload.content, payload.folder_id, json.dumps(payload.tags), now, now, 1),
+        (
+            note_id,
+            payload.title,
+            payload.content,
+            payload.folder_id,
+            json.dumps(payload.tags),
+            payload.source,
+            now,
+            now,
+            1,
+        ),
     )
     conn.commit()
     return get_note(conn, note_id)
@@ -153,16 +171,17 @@ def update_note(conn, note_id: str, payload: NoteUpdate) -> NoteRead | None:
     content = updates.get("content", current.content)
     folder_id = updates.get("folder_id", current.folder_id)
     tags = updates.get("tags", current.tags)
+    source = updates.get("source", current.source)
     now = utcnow().isoformat()
     new_version = current.version + 1
 
     conn.execute(
         """
         UPDATE note
-        SET title = ?, content = ?, folder_id = ?, tags = ?, updated_at = ?, version = ?
+        SET title = ?, content = ?, folder_id = ?, tags = ?, source = ?, updated_at = ?, version = ?
         WHERE id = ?
         """,
-        (title, content, folder_id, json.dumps(tags), now, new_version, note_id),
+        (title, content, folder_id, json.dumps(tags), source, now, new_version, note_id),
     )
     conn.commit()
     return get_note(conn, note_id)
@@ -179,7 +198,7 @@ def search_notes(conn, query: str, limit: int = 10) -> list[NoteRead]:
     pattern = f"%{query}%"
     cur = conn.execute(
         """
-        SELECT id, title, content, folder_id, tags, created_at, updated_at, version
+        SELECT id, title, content, folder_id, tags, source, created_at, updated_at, version
         FROM note
         WHERE title LIKE ? OR content LIKE ?
         ORDER BY datetime(updated_at) DESC
@@ -200,8 +219,8 @@ def upsert_note(conn, payload: NoteCreate) -> tuple:
         note_id = row[0] if not isinstance(row, sqlite3.Row) else row["id"]
         now = utcnow().isoformat()
         conn.execute(
-            "UPDATE note SET content=?, folder_id=?, tags=?, updated_at=?, version=version+1 WHERE id=?",
-            (payload.content, payload.folder_id, json.dumps(payload.tags), now, note_id),
+            "UPDATE note SET content=?, folder_id=?, tags=?, source=?, updated_at=?, version=version+1 WHERE id=?",
+            (payload.content, payload.folder_id, json.dumps(payload.tags), payload.source, now, note_id),
         )
         conn.commit()
         return get_note(conn, note_id), False

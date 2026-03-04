@@ -29,28 +29,20 @@ export type IngestJob = {
 
 export type GraphNode = {
   id: string;
-  label: string;
-  name: string;
-  entity_type: string;
-  fact_count: number;
-  rule_count: number;
+  title: string;
+  category: string;
+  tag_count: number;
 };
 
 export type GraphEdge = {
-  from: string;
-  to: string;
-  label: string;
-  relation: string;
+  source: string;
+  target: string;
+  shared_tag: string;
 };
 
 export type GraphPayload = {
   nodes: GraphNode[];
   edges: GraphEdge[];
-  stats: {
-    entities: number;
-    facts: number;
-    rules: number;
-  };
 };
 
 export function useNoteEntities(noteId: string | null) {
@@ -95,6 +87,6 @@ export function useIngestStatus(noteId: string | null) {
 export function useKnowledgeGraph() {
   return useQuery({
     queryKey: ["graph", "full"],
-    queryFn: () => api.get<GraphPayload>("/api/v1/lorien/graph"),
+    queryFn: () => api.get<GraphPayload>("/api/v1/graph/notes"),
   });
 }

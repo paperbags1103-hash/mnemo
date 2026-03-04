@@ -1,13 +1,14 @@
 import { Component, type ErrorInfo, type ReactNode, useCallback, useEffect, useState } from "react";
-import { FileText, Network, Plus } from "lucide-react";
+import { FileText, LayoutList, Network, Plus } from "lucide-react";
 import { NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { DigestPage } from "@/features/digest/DigestPage";
 import { GraphView } from "@/features/graph/components/GraphView";
 import { KnowledgePanel } from "@/features/graph/components/KnowledgePanel";
 import { NoteEditor } from "@/features/notes/components/NoteEditor";
+import { NotesSidebar } from "@/features/notes/components/NotesSidebar";
 import { useCreateNote } from "@/features/notes/hooks/useNotes";
 import { useNotesStore } from "@/features/notes/store";
-import { FileTree } from "@/features/tree/components/FileTree";
 import { cn } from "@/lib/utils";
 
 function useDefaultKnowledgePanelOpen(noteId: string | null) {
@@ -54,6 +55,18 @@ function SidebarNav() {
           to="/"
         >
           <FileText className="h-4 w-4" />
+        </NavLink>
+        <NavLink
+          className={({ isActive }) =>
+            cn(
+              "flex h-10 items-center justify-center rounded-xl border border-transparent text-[#9b9b9b] transition-colors hover:bg-[#efefed] hover:text-[#1a1a1a]",
+              isActive && "border-[#e9e9e7] bg-[#ffffff] text-[#1a1a1a]",
+            )
+          }
+          title="Digest"
+          to="/digest"
+        >
+          <LayoutList className="h-4 w-4" />
         </NavLink>
       </div>
       <NavLink
@@ -155,6 +168,7 @@ export function App() {
     const created = await createNote.mutateAsync({
       title: "Untitled",
       content: "<p></p>",
+      category: "기타",
     });
 
     setSelectedNoteId(created.id);
@@ -177,9 +191,10 @@ export function App() {
     <ErrorBoundary>
       <div className="flex h-screen overflow-hidden bg-[#ffffff] text-[#1a1a1a]">
         <SidebarNav />
-        {location.pathname === "/" ? <FileTree /> : null}
+        {location.pathname === "/" ? <NotesSidebar /> : null}
         <Routes>
           <Route element={<NotesScreen onCreateNote={handleCreateNote} />} path="/" />
+          <Route element={<DigestPage />} path="/digest" />
           <Route element={<GraphScreen />} path="/graph" />
         </Routes>
       </div>

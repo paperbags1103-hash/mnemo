@@ -6,9 +6,27 @@ from uuid import UUID, uuid4
 
 from sqlmodel import Field, SQLModel
 
+CATEGORY_TAG_PREFIX = "cat:"
+DEFAULT_CATEGORY = "기타"
+
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def extract_category(tags: list[str] | None) -> str:
+    for tag in tags or []:
+        if tag.startswith(CATEGORY_TAG_PREFIX):
+            category = tag[len(CATEGORY_TAG_PREFIX) :].strip()
+            if category:
+                return category
+    return DEFAULT_CATEGORY
+
+
+def apply_category_tag(tags: list[str] | None, category: str | None) -> list[str]:
+    normalized_tags = [tag for tag in tags or [] if not tag.startswith(CATEGORY_TAG_PREFIX)]
+    normalized_category = (category or DEFAULT_CATEGORY).strip() or DEFAULT_CATEGORY
+    return [f"{CATEGORY_TAG_PREFIX}{normalized_category}", *normalized_tags]
 
 
 class NoteBase(SQLModel):
@@ -34,7 +52,7 @@ class NoteRead(NoteBase):
 
 
 class NoteCreate(NoteBase):
-    pass
+    category: str | None = Field(default=None, max_length=255)
 
 
 class NoteUpdate(SQLModel):
@@ -42,4 +60,5 @@ class NoteUpdate(SQLModel):
     content: Optional[str] = Field(default=None, max_length=1_000_000)
     folder_id: Optional[str] = Field(default=None, max_length=255)
     tags: Optional[list[str]] = None
+    category: Optional[str] = Field(default=None, max_length=255)
     version: Optional[int] = None

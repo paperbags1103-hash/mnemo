@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from app.core.auth import verify_api_key
 from app.core.db import db
-from app.models.note import NoteCreate, NoteRead
+from app.models.note import DEFAULT_CATEGORY, NoteCreate, NoteRead, apply_category_tag
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"], dependencies=[Depends(verify_api_key)])
 logger = logging.getLogger(__name__)
@@ -17,6 +17,7 @@ class WebhookPayload(BaseModel):
     title: str = "Untitled"
     content: str = ""
     tags: list[str] = Field(default_factory=list)
+    category: str = DEFAULT_CATEGORY
     source: str = ""
     source_ref: str = Field(default="", description="Origin URL, book title, or other reference")
     upsert: bool = False
@@ -28,11 +29,14 @@ async def webhook_save(payload: WebhookPayload) -> NoteRead:
     if payload.source:
         content = f"**Source:** {payload.source}\n\n{content}"
 
+    tags = apply_category_tag(payload.tags, payload.category)
+
     note_payload = NoteCreate(
         title=payload.title,
         content=content,
         folder_id=None,
-        tags=payload.tags,
+        tags=tags,
+        category=payload.category,
         source_ref=payload.source_ref or None,
     )
 

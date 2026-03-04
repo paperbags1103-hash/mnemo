@@ -1,27 +1,62 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Placeholder from "@tiptap/extension-placeholder";
+import { useQuery } from "@tanstack/react-query";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Input } from "@/components/ui/input";
-import { useNote, useUpdateNote } from "@/features/notes/hooks/useNotes";
+import { useNote, useNoteLinks, useUpdateNote } from "@/features/notes/hooks/useNotes";
 import { useNotesStore } from "@/features/notes/store";
-
-type NoteDraft = {
-  title: string;
-  content: string;
-};
+import {
+  NOTE_CATEGORIES,
+  getNoteCategory,
+  type Note,
+  type NoteCategory,
+} from "@/features/notes/types";
+import { api } from "@/lib/api";
 
 function normalizeContent(content: string) {
   return content.trim() ? content : "<p></p>";
 }
 
+function linkLabel(kind: "backlink" | "outlink", title: string) {
+  return kind === "backlink" ? `\u2190 From: ${title}` : `\u2192 To: ${title}`;
+}
+
 export function NoteEditor() {
-  const { selectedNoteId, savingState, setSavingState } = useNotesStore();
+  const { selectedNoteId, savingState, setSavingState, setSelectedNoteId } = useNotesStore();
   const { data: note, isLoading } = useNote(selectedNoteId);
+  const { data: links } = useNoteLinks(selectedNoteId);
   const updateNote = useUpdateNote();
   const [title, setTitle] = useState("");
-  const [draft, setDraft] = useState<NoteDraft | null>(null);
-  const saveTimerRef = useRef<number | null>(null);
+  const [category, setCategory] = useState<NoteCategory>("기타");
+
+  const linkedNoteIds = useMemo(() => {
+    if (!links) {
+      return [];
+    }
+
+    return Array.from(
+      new Set([
+        ...links.backlinks.map((entry) => entry.note_id),
+        ...links.outlinks.map((entry) => entry.note_id),
+      ]),
+    );
+  }, [links]);
+
+  const { data: linkedNotes = {} } = useQuery<Record<string, Note>>({
+    queryKey: ["notes", selectedNoteId, "linked-note-titles", linkedNoteIds],
+    enabled: linkedNoteIds.length > 0,
+    queryFn: async () => {
+      const entries = await Promise.all(
+        linkedNoteIds.map(async (noteId) => {
+          const linkedNote = await api.get<Note>(`/api/v1/notes/${noteId}`);
+          return [noteId, linkedNote] as const;
+        }),
+      );
+
+      return Object.fromEntries(entries);
+    },
+  });
 
   const editor = useEditor({
     extensions: [
@@ -37,11 +72,7 @@ export function NoteEditor() {
           "h-full min-h-full px-8 py-6 text-[15px] leading-7 text-[#1a1a1a] outline-none",
       },
     },
-    onUpdate: ({ editor: currentEditor }) => {
-      setDraft({
-        title,
-        content: currentEditor.getHTML(),
-      });
+    onUpdate: () => {
       setSavingState("idle");
     },
   });
@@ -54,19 +85,22 @@ export function NoteEditor() {
     return {
       title,
       content: editor?.getHTML() ?? normalizeContent(note.content),
+      category,
     };
-  }, [title, editor, note]);
+  }, [category, title, editor, note]);
 
   const saveNote = useCallback(
-    (nextDraft: NoteDraft | null) => {
+    (nextDraft: { title: string; content: string; category: NoteCategory } | null) => {
       if (!note || !nextDraft) {
         return;
       }
 
       const normalizedServerContent = normalizeContent(note.content);
+      const currentCategory = getNoteCategory(note.tags);
       if (
         nextDraft.title === note.title &&
-        nextDraft.content === normalizedServerContent
+        nextDraft.content === normalizedServerContent &&
+        nextDraft.category === currentCategory
       ) {
         setSavingState("saved");
         return;
@@ -84,10 +118,7 @@ export function NoteEditor() {
         {
           onSuccess: (updatedNote) => {
             setTitle(updatedNote.title);
-            setDraft({
-              title: updatedNote.title,
-              content: normalizeContent(updatedNote.content),
-            });
+            setCategory(getNoteCategory(updatedNote.tags));
             setSavingState("saved");
           },
           onError: () => {
@@ -100,14 +131,7 @@ export function NoteEditor() {
   );
 
   const handleSave = useCallback(() => {
-    if (saveTimerRef.current !== null) {
-      window.clearTimeout(saveTimerRef.current);
-    }
-
     const nextDraft = buildDraft();
-    if (nextDraft) {
-      setDraft(nextDraft);
-    }
     saveNote(nextDraft);
   }, [buildDraft, saveNote]);
 
@@ -117,17 +141,14 @@ export function NoteEditor() {
         editor.commands.setContent("<p></p>", false);
       }
       setTitle("");
-      setDraft(null);
+      setCategory("기타");
       setSavingState("idle");
       return;
     }
 
     const nextContent = normalizeContent(note.content);
     setTitle(note.title);
-    setDraft({
-      title: note.title,
-      content: nextContent,
-    });
+    setCategory(getNoteCategory(note.tags));
     editor.commands.setContent(nextContent, false);
     setSavingState("saved");
   }, [editor, note, setSavingState]);
@@ -147,26 +168,6 @@ export function NoteEditor() {
   }, [savingState, setSavingState]);
 
   useEffect(() => {
-    if (!note || !draft) {
-      return;
-    }
-
-    if (saveTimerRef.current !== null) {
-      window.clearTimeout(saveTimerRef.current);
-    }
-
-    saveTimerRef.current = window.setTimeout(() => {
-      saveNote(draft);
-    }, 1000);
-
-    return () => {
-      if (saveTimerRef.current !== null) {
-        window.clearTimeout(saveTimerRef.current);
-      }
-    };
-  }, [draft, note, saveNote]);
-
-  useEffect(() => {
     if (!note) {
       return;
     }
@@ -176,21 +177,13 @@ export function NoteEditor() {
       return;
     }
 
-    setDraft((currentDraft) => {
-      if (
-        currentDraft?.title === nextDraft.title &&
-        currentDraft.content === nextDraft.content
-      ) {
-        return currentDraft;
-      }
+    const hasChanges =
+      nextDraft.title !== note.title ||
+      nextDraft.content !== normalizeContent(note.content) ||
+      category !== getNoteCategory(note.tags);
 
-      return nextDraft;
-    });
-
-    if (title !== note.title) {
-      setSavingState("idle");
-    }
-  }, [title, editor, note, setSavingState, buildDraft]);
+    setSavingState(hasChanges ? "idle" : "saved");
+  }, [title, category, editor, note, setSavingState, buildDraft]);
 
   useEffect(() => {
     if (!editor) {
@@ -228,6 +221,10 @@ export function NoteEditor() {
     );
   }
 
+  const backlinks = links?.backlinks ?? [];
+  const outlinks = links?.outlinks ?? [];
+  const hasLinks = backlinks.length > 0 || outlinks.length > 0;
+
   return (
     <section className="relative flex h-full flex-col overflow-hidden bg-[#ffffff]">
       <div className="flex items-start justify-between gap-4 border-b border-[#e9e9e7] px-8 py-5">
@@ -238,6 +235,17 @@ export function NoteEditor() {
           value={title}
         />
         <div className="flex min-w-28 items-center justify-end gap-2 pt-2 text-right text-xs text-[#9b9b9b]">
+          <select
+            className="h-9 rounded border border-[#e3e3e1] bg-[#ffffff] px-3 text-sm text-[#1a1a1a] outline-none transition-colors focus:border-[#d7d7d3]"
+            onChange={(event) => setCategory(event.target.value as NoteCategory)}
+            value={category}
+          >
+            {NOTE_CATEGORIES.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
           {savingState === "saving" && (
             <span className="text-sm text-gray-400">Saving...</span>
           )}
@@ -267,6 +275,38 @@ export function NoteEditor() {
       </div>
       <div className="flex-1 overflow-y-auto">
         <EditorContent editor={editor} />
+        {hasLinks ? (
+          <section className="mx-8 mb-8 border-t border-[#e9e9e7] pt-5">
+            <div className="flex items-center gap-2 text-sm font-medium text-[#1a1a1a]">
+              <span>Links</span>
+              <span className="text-xs font-normal text-[#9b9b9b]">
+                ({backlinks.length} backlinks, {outlinks.length} outlinks)
+              </span>
+            </div>
+            <div className="mt-3 space-y-1">
+              {backlinks.map((entry) => (
+                <button
+                  key={`backlink-${entry.note_id}`}
+                  className="block text-sm text-[#5f6f86] transition-colors hover:text-[#1a1a1a]"
+                  onClick={() => setSelectedNoteId(entry.note_id)}
+                  type="button"
+                >
+                  {linkLabel("backlink", linkedNotes[entry.note_id]?.title || "Untitled")}
+                </button>
+              ))}
+              {outlinks.map((entry) => (
+                <button
+                  key={`outlink-${entry.note_id}`}
+                  className="block text-sm text-[#5f6f86] transition-colors hover:text-[#1a1a1a]"
+                  onClick={() => setSelectedNoteId(entry.note_id)}
+                  type="button"
+                >
+                  {linkLabel("outlink", linkedNotes[entry.note_id]?.title || "Untitled")}
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
       </div>
     </section>
   );

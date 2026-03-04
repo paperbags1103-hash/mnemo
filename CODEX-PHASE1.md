@@ -1,89 +1,216 @@
-# mnemo Phase 1 — Foundation & Skeleton
+# mnemo Phase 1 — Foundation
 
-Build the complete monorepo skeleton for the **mnemo** project (AI agent's Obsidian web app).
+## Overview
+Fix search, add bearer token auth, add note_link table, delete debug files.
 
-## Architecture
-- Frontend: Vite + React + TypeScript + TipTap + shadcn/ui → deploys to Vercel
-- Backend: FastAPI (Python) → deploys to Fly.io
-- Notes DB: Turso (libSQL cloud, SQLite-compatible)
-- Knowledge graph: lorien (Python library at ~/Documents/lorien/)
+## Task 1: Fix Search (replace FTS5 with LIKE)
 
-## Task: Build the full monorepo skeleton
-
-### 1. Root structure
-Create `pnpm-workspace.yaml` (or npm workspaces in root `package.json`), `.gitignore`, `.env.example`, `README.md`.
-
-### 2. Frontend: `apps/frontend/`
-- Vite + React + TypeScript
-- Install: `tiptap` (`@tiptap/react @tiptap/pm @tiptap/starter-kit`), `shadcn/ui` setup, `react-router-dom`, `zustand`, `@tanstack/react-query`
-- Layout: Obsidian-style — left sidebar (file tree) + right editor panel
-- Create placeholder components:
-  - `src/app/App.tsx` — router setup
-  - `src/features/notes/components/NoteEditor.tsx` — TipTap editor (basic markdown)
-  - `src/features/tree/components/FileTree.tsx` — left sidebar note list
-  - `src/lib/api.ts` — axios/fetch client with base URL from env
-- `src/lib/queryClient.ts` — TanStack Query setup
-- vite.config.ts with proxy to backend (`/api` → `http://localhost:8000`)
-- `.env.example`: `VITE_API_URL=http://localhost:8000`
-
-### 3. Backend: `apps/backend/`
-- FastAPI + Python 3.11+
-- `pyproject.toml` with dependencies: `fastapi uvicorn[standard] pydantic pydantic-settings sqlmodel libsql-client python-dotenv`
-- Structure:
+Edit `api/_lib/db.py`:
+- Find the `search_notes` function
+- Remove ALL FTS5/virtual table creation code (note_fts table, tokenize='trigram', etc.)
+- Replace with simple LIKE query:
+  ```python
+  def search_notes(conn, q: str, limit: int = 20) -> list[NoteRead]:
+      q_like = f"%{q}%"
+      rows = conn.execute(
+          "SELECT * FROM notes WHERE title LIKE ? OR content LIKE ? ORDER BY updated_at DESC LIMIT ?",
+          (q_like, q_like, limit),
+      ).fetchall()
+      return [NoteRead(**dict(zip([c[0] for c in conn.execute("PRAGMA table_info(notes)").fetchall()], row))) for row in rows]
   ```
-  app/
-    main.py          — FastAPI app, CORS, routers
-    core/
-      config.py      — Settings (pydantic-settings, reads .env)
-      db.py          — Turso/libSQL connection
-    api/v1/
-      health.py      — GET /health/live, GET /health/ready
-      notes.py       — CRUD stubs (POST/GET/PATCH/DELETE /notes)
-      tree.py        — GET /tree stub
-      search.py      — GET /search stub
-      ingest.py      — GET /ingest/jobs stub
-      lorien.py      — POST /lorien/ingest/note stub
-    models/
-      note.py        — Note SQLModel
-      folder.py      — Folder SQLModel
-      ingest_job.py  — IngestJob SQLModel
-  ```
-- CORS middleware: allow all origins for dev
-- `.env.example`: `TURSO_URL=libsql://... TURSO_AUTH_TOKEN=... LORIEN_DB_PATH=~/.openclaw/workspace/.lorien/db`
-- `requirements.txt` as well
+  
+  Actually, look at how other functions like `list_notes` retrieve rows and use the same pattern for `search_notes`. The key is: use LIKE search on title and content columns, return list of NoteRead objects.
 
-### 4. Health endpoints (IMPLEMENT, not stubs)
-Implement `GET /health/live` → `{"status": "ok"}` and `GET /health/ready` → `{"status": "ok", "turso": "connected|error", "lorien": "available|unavailable"}`
+Also in `apps/backend/app/db/notes.py` (if it exists), make the same fix.
 
-### 5. Notes CRUD (IMPLEMENT basic version)
-Implement actual Note CRUD with in-memory or SQLite fallback (since Turso needs credentials):
-- Note model: `id (uuid), title, content (markdown text), folder_id (nullable), created_at, updated_at, version (int)`
-- Use SQLite locally via `aiosqlite` or `databases` as fallback when TURSO_URL not set
-- POST /api/v1/notes → create note
-- GET /api/v1/notes → list notes
-- GET /api/v1/notes/{id} → get note
-- PATCH /api/v1/notes/{id} → update note (increment version)
-- DELETE /api/v1/notes/{id} → delete note
+## Task 2: Bearer Token Auth
 
-### 6. Frontend ↔ Backend integration
-- Connect FileTree to GET /api/v1/notes
-- Connect NoteEditor to GET/PATCH /api/v1/notes/{id}
-- Auto-save with 1s debounce on content change
-- Show note list in left sidebar, click to open in editor
+Edit `api/_lib/config.py`:
+- Add: `MNEMO_TOKEN = os.environ.get("MNEMO_TOKEN", "")`
 
-### 7. Deployment configs
-- `apps/frontend/vercel.json` — SPA routing config
-- `apps/backend/Dockerfile` — Python 3.11 slim, uvicorn
-- `apps/backend/fly.toml` — basic Fly.io config
+Create `api/_lib/auth.py`:
+```python
+import os
+from http.server import BaseHTTPRequestHandler
 
-### 8. Git commit
-Commit everything with message: `feat: Phase 1 — mnemo monorepo skeleton with working editor`
+MNEMO_TOKEN = os.environ.get("MNEMO_TOKEN", "")
 
-## Done criteria
-- `cd apps/frontend && npm install && npm run dev` starts Vite dev server
-- `cd apps/backend && uvicorn app.main:app --reload` starts FastAPI
-- Note CRUD works end-to-end (create, list, edit, auto-save)
-- Health endpoints respond correctly
+def check_write_auth(headers) -> bool:
+    """Returns True if write access is allowed. GET requests skip this."""
+    if not MNEMO_TOKEN:
+        return True  # dev mode: no token set = open access
+    auth = headers.get("Authorization", "")
+    return auth == f"Bearer {MNEMO_TOKEN}"
+```
 
-When completely finished, run:
-openclaw system event --text "Done: mnemo Phase 1 완료 — monorepo skeleton + working editor" --mode now
+Edit the following files to use `check_write_auth` for POST/PATCH/DELETE/PUT methods only (NOT GET):
+- `api/notes.py` — do_POST, do_PUT
+- `api/notes_id.py` — do_PATCH, do_DELETE  
+- `api/webhook.py` — do_POST
+
+Replace existing `_check_auth` calls in these files with `check_write_auth` from `api/_lib/auth.py`.
+
+Also update CORS headers in do_OPTIONS methods to include `Authorization` header:
+```
+Access-Control-Allow-Headers: Content-Type, X-Api-Key, Authorization
+```
+
+## Task 3: Add note_link Table
+
+Edit `api/_lib/db.py` in the `initialize()` function, add after the notes table creation:
+```sql
+CREATE TABLE IF NOT EXISTS note_link (
+    source_id TEXT NOT NULL,
+    target_id TEXT NOT NULL,
+    link_type TEXT DEFAULT 'manual',
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (source_id, target_id)
+)
+```
+
+Add these functions to `api/_lib/db.py`:
+```python
+def get_links(conn, note_id: str) -> dict:
+    """Returns outlinks and backlinks for a note."""
+    outlinks = conn.execute(
+        "SELECT target_id, link_type, created_at FROM note_link WHERE source_id = ?",
+        (note_id,)
+    ).fetchall()
+    backlinks = conn.execute(
+        "SELECT source_id, link_type, created_at FROM note_link WHERE target_id = ?",
+        (note_id,)
+    ).fetchall()
+    return {
+        "outlinks": [{"note_id": r[0], "link_type": r[1], "created_at": r[2]} for r in outlinks],
+        "backlinks": [{"note_id": r[0], "link_type": r[1], "created_at": r[2]} for r in backlinks],
+    }
+
+def create_link(conn, source_id: str, target_id: str, link_type: str = "manual") -> bool:
+    from datetime import datetime, timezone
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO note_link (source_id, target_id, link_type, created_at) VALUES (?, ?, ?, ?)",
+            (source_id, target_id, link_type, datetime.now(timezone.utc).isoformat())
+        )
+        conn.commit()
+        return True
+    except Exception:
+        return False
+
+def delete_link(conn, source_id: str, target_id: str) -> bool:
+    conn.execute(
+        "DELETE FROM note_link WHERE source_id = ? AND target_id = ?",
+        (source_id, target_id)
+    )
+    conn.commit()
+    return True
+```
+
+Create `api/links.py`:
+```python
+"""GET /api/v1/notes/:noteId/links — get backlinks and outlinks
+POST /api/v1/links — create a link
+DELETE /api/v1/links — delete a link"""
+
+import json
+import os as _os
+import sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from http.server import BaseHTTPRequestHandler
+from urllib.parse import parse_qs, urlparse
+from _lib.db import close_conn, initialize, get_links, create_link, delete_link
+from _lib.auth import check_write_auth
+
+
+class handler(BaseHTTPRequestHandler):
+    def _write_json(self, status: int, payload) -> None:
+        body = json.dumps(payload)
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(body.encode())
+
+    def do_GET(self):
+        params = parse_qs(urlparse(self.path).query)
+        note_id = params.get("note_id", [None])[0]
+        if not note_id:
+            self._write_json(400, {"detail": "note_id required"})
+            return
+        conn = initialize()
+        try:
+            links = get_links(conn, note_id)
+        finally:
+            close_conn(conn)
+        self._write_json(200, links)
+
+    def do_POST(self):
+        if not check_write_auth(self.headers):
+            self._write_json(401, {"detail": "Unauthorized"})
+            return
+        length = int(self.headers.get("Content-Length", 0))
+        raw = self.rfile.read(length)
+        data = json.loads(raw or b"{}")
+        source_id = data.get("source_id")
+        target_id = data.get("target_id")
+        link_type = data.get("link_type", "manual")
+        if not source_id or not target_id:
+            self._write_json(400, {"detail": "source_id and target_id required"})
+            return
+        conn = initialize()
+        try:
+            create_link(conn, source_id, target_id, link_type)
+        finally:
+            close_conn(conn)
+        self._write_json(201, {"source_id": source_id, "target_id": target_id, "link_type": link_type})
+
+    def do_DELETE(self):
+        if not check_write_auth(self.headers):
+            self._write_json(401, {"detail": "Unauthorized"})
+            return
+        params = parse_qs(urlparse(self.path).query)
+        source_id = params.get("source_id", [None])[0]
+        target_id = params.get("target_id", [None])[0]
+        if not source_id or not target_id:
+            self._write_json(400, {"detail": "source_id and target_id required"})
+            return
+        conn = initialize()
+        try:
+            delete_link(conn, source_id, target_id)
+        finally:
+            close_conn(conn)
+        self._write_json(204, {})
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        self.end_headers()
+```
+
+## Task 4: Update vercel.json
+
+Add these rewrites to `vercel.json` (before the catch-all `/(.*)`):
+```json
+{ "source": "/api/v1/notes/:noteId/links", "destination": "/api/links?note_id=:noteId" },
+{ "source": "/api/v1/links", "destination": "/api/links" }
+```
+
+## Task 5: Delete debug files
+
+Delete these files:
+- `api/health_test.py`
+- `api/dbg_path.py`
+
+## Task 6: Build verification
+
+Run: `cd apps/frontend && npm run build 2>&1 | tail -5`
+Must pass with no errors.
+
+## Final Steps
+
+1. Run build verification
+2. `cd ~/Documents/mnemo && git add -A && git commit -m "feat: Phase 1 — LIKE search, bearer token auth, note_link table"`
+
+Note: git push will fail in sandbox. That's OK.

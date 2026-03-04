@@ -3,11 +3,13 @@
   "buildCommand": "cd apps/frontend && npm install --legacy-peer-deps && npm run build",
   "outputDirectory": "apps/frontend/dist",
   "rewrites": [
+    { "source": "/api/v1/digest", "destination": "/api/digest" },
     { "source": "/api/v1/notes", "destination": "/api/notes" },
     { "source": "/api/v1/notes/:noteId", "destination": "/api/notes_id?note_id=:noteId" },
     { "source": "/api/v1/notes/:noteId/links", "destination": "/api/links?note_id=:noteId" },
     { "source": "/api/v1/links", "destination": "/api/links" },
     { "source": "/api/v1/search", "destination": "/api/search" },
+    { "source": "/api/v1/tags", "destination": "/api/tags" },
     { "source": "/api/v1/tree", "destination": "/api/tree" },
     { "source": "/api/v1/webhooks/save", "destination": "/api/webhook" },
     { "source": "/api/health", "destination": "/api/health?check=live" },

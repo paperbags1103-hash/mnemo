@@ -23,13 +23,13 @@ type VisNetworkInstance = {
   destroy: () => void;
 };
 
-const ENTITY_COLORS: Record<string, string> = {
-  person: "#ef4444",
-  project: "#3b82f6",
-  tool: "#22c55e",
-  concept: "#a855f7",
-  org: "#f97316",
-  default: "#9b9b9b",
+const CATEGORY_COLORS: Record<string, string> = {
+  투자: "#3b82f6",
+  기술: "#8b5cf6",
+  문화: "#f97316",
+  여행: "#22c55e",
+  일기: "#eab308",
+  기타: "#9b9b9b",
 };
 
 let visNetworkPromise: Promise<void> | null = null;
@@ -65,12 +65,14 @@ export function GraphView() {
     [data?.nodes, selectedNodeId],
   );
 
-  const relatedEdges = useMemo(() => {
+  const relatedConnections = useMemo(() => {
     if (!data || !selectedNodeId) {
       return [];
     }
 
-    return data.edges.filter((edge) => edge.from === selectedNodeId || edge.to === selectedNodeId);
+    return data.edges.filter(
+      (edge) => edge.source === selectedNodeId || edge.target === selectedNodeId,
+    );
   }, [data, selectedNodeId]);
 
   useEffect(() => {
@@ -91,10 +93,10 @@ export function GraphView() {
           data.nodes.map((node) => ({
             ...node,
             color: {
-              background: ENTITY_COLORS[node.entity_type] ?? ENTITY_COLORS.default,
+              background: CATEGORY_COLORS[node.category] ?? CATEGORY_COLORS["기타"],
               border: "#e9e9e7",
               highlight: {
-                background: ENTITY_COLORS[node.entity_type] ?? ENTITY_COLORS.default,
+                background: CATEGORY_COLORS[node.category] ?? CATEGORY_COLORS["기타"],
                 border: "#1a1a1a",
               },
             },
@@ -103,12 +105,15 @@ export function GraphView() {
               face: "IBM Plex Sans",
             },
             shape: "dot",
-            size: 16 + Math.min(node.fact_count * 2, 24),
+            label: node.title,
+            size: 16 + Math.min(node.tag_count * 3, 24),
           })),
         );
         const edges = new window.vis.DataSet(
           data.edges.map((edge) => ({
-            ...edge,
+            from: edge.source,
+            to: edge.target,
+            label: edge.shared_tag,
             color: "#d6d6d3",
             font: {
               color: "#9b9b9b",
@@ -170,13 +175,12 @@ export function GraphView() {
         <div>
           <h1 className="text-lg font-bold tracking-[0.08em] text-[#1a1a1a]">Knowledge Graph</h1>
           <p className="text-xs uppercase tracking-[0.18em] text-[#9b9b9b]">
-            Lorien entities and relationships
+            Note links by shared tags
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <StatChip label="Entities" value={data?.stats.entities ?? 0} />
-          <StatChip label="Facts" value={data?.stats.facts ?? 0} />
-          <StatChip label="Rules" value={data?.stats.rules ?? 0} />
+          <StatChip label="Notes" value={data?.nodes.length ?? 0} />
+          <StatChip label="Links" value={data?.edges.length ?? 0} />
         </div>
       </header>
 
@@ -207,27 +211,28 @@ export function GraphView() {
 
         <aside className="flex h-full w-[320px] flex-col border-l border-[#e9e9e7] bg-[#f7f7f5]">
           <div className="border-b border-[#e9e9e7] px-4 py-3">
-            <p className="text-[11px] uppercase tracking-[0.28em] text-[#9b9b9b]">Entity Details</p>
+            <p className="text-[11px] uppercase tracking-[0.28em] text-[#9b9b9b]">Note Details</p>
           </div>
           <div className="flex-1 overflow-y-auto p-4">
             {selectedNode ? (
               <>
                 <div className="rounded-2xl border border-[#e9e9e7] bg-[#ffffff] p-4">
                   <div className="flex items-center justify-between gap-3">
-                    <h2 className="text-lg font-semibold text-[#1a1a1a]">{selectedNode.name}</h2>
+                    <h2 className="text-lg font-semibold text-[#1a1a1a]">
+                      {selectedNode.title || "Untitled"}
+                    </h2>
                     <span
                       className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em]"
                       style={{
-                        backgroundColor: `${ENTITY_COLORS[selectedNode.entity_type] ?? ENTITY_COLORS.default}1A`,
-                        color: ENTITY_COLORS[selectedNode.entity_type] ?? ENTITY_COLORS.default,
+                        backgroundColor: `${CATEGORY_COLORS[selectedNode.category] ?? CATEGORY_COLORS["기타"]}1A`,
+                        color: CATEGORY_COLORS[selectedNode.category] ?? CATEGORY_COLORS["기타"],
                       }}
                     >
-                      {selectedNode.entity_type}
+                      {selectedNode.category}
                     </span>
                   </div>
-                  <div className="mt-4 grid grid-cols-2 gap-2">
-                    <DetailStat label="Facts" value={selectedNode.fact_count} />
-                    <DetailStat label="Rules" value={selectedNode.rule_count} />
+                  <div className="mt-4 grid grid-cols-1 gap-2">
+                    <DetailStat label="Shared Tags" value={selectedNode.tag_count} />
                   </div>
                 </div>
 
@@ -236,11 +241,12 @@ export function GraphView() {
                     Relationships
                   </h3>
                   <div className="mt-3 space-y-2">
-                    {relatedEdges.length === 0 ? (
+                    {relatedConnections.length === 0 ? (
                       <p className="text-sm text-[#9b9b9b]">No related edges for this node.</p>
                     ) : (
-                      relatedEdges.map((edge, index) => {
-                        const counterpartId = edge.from === selectedNode.id ? edge.to : edge.from;
+                      relatedConnections.map((edge, index) => {
+                        const counterpartId =
+                          edge.source === selectedNode.id ? edge.target : edge.source;
                         const counterpart = data?.nodes.find((node) => node.id === counterpartId) as
                           | GraphNode
                           | undefined;
@@ -248,15 +254,15 @@ export function GraphView() {
                         return (
                           <button
                             className="w-full rounded-xl border border-[#e9e9e7] bg-[#ffffff] px-3 py-3 text-left transition-colors hover:bg-[#f0f0ee]"
-                            key={`${edge.from}-${edge.to}-${index}`}
+                            key={`${edge.source}-${edge.target}-${edge.shared_tag}-${index}`}
                             onClick={() => setSelectedNodeId(counterpartId)}
                             type="button"
                           >
                             <p className="text-sm font-medium text-[#1a1a1a]">
-                              {counterpart?.name ?? counterpartId}
+                              {counterpart?.title || "Untitled"}
                             </p>
                             <p className="mt-1 text-xs uppercase tracking-[0.16em] text-[#9b9b9b]">
-                              {edge.relation || "related_to"}
+                              {edge.shared_tag}
                             </p>
                           </button>
                         );

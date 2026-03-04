@@ -1,7 +1,13 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { queryClient } from "@/lib/queryClient";
-import type { CreateNoteInput, Note, UpdateNoteInput } from "@/features/notes/types";
+import type {
+  CreateNoteInput,
+  DigestResponse,
+  Note,
+  NoteLinksResponse,
+  UpdateNoteInput,
+} from "@/features/notes/types";
 
 export const NOTES_QUERY_KEY = ["notes"];
 
@@ -57,5 +63,27 @@ export function useDeleteNote() {
         current?.filter((entry) => entry.id !== noteId) ?? [],
       );
     },
+  });
+}
+
+export function useNoteLinks(noteId: string | null) {
+  return useQuery({
+    queryKey: ["notes", noteId, "links"],
+    enabled: noteId !== null,
+    queryFn: () => api.get<NoteLinksResponse>(`/api/v1/notes/${noteId}/links`),
+  });
+}
+
+export function useTags() {
+  return useQuery({
+    queryKey: ["tags"],
+    queryFn: () => api.get<{ tags: string[] }>("/api/v1/tags"),
+  });
+}
+
+export function useDigest() {
+  return useQuery({
+    queryKey: ["digest"],
+    queryFn: () => api.get<DigestResponse>("/api/v1/digest"),
   });
 }

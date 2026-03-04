@@ -16,6 +16,7 @@ class NoteBase(BaseModel):
     content: str = Field(default="", max_length=1_000_000)
     folder_id: Optional[str] = Field(default=None, max_length=255)
     tags: list[str] = Field(default_factory=list)
+    source: str = Field(default="human", max_length=255)
 
 
 class NoteCreate(NoteBase):
@@ -27,6 +28,7 @@ class NoteUpdate(BaseModel):
     content: Optional[str] = Field(default=None, max_length=1_000_000)
     folder_id: Optional[str] = Field(default=None, max_length=255)
     tags: Optional[list[str]] = None
+    source: Optional[str] = Field(default=None, max_length=255)
     version: Optional[int] = None
 
 

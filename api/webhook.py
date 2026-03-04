@@ -29,12 +29,10 @@ class handler(BaseHTTPRequestHandler):
         data = json.loads(self.rfile.read(length) or b"{}")
         title = data.get("title", "Untitled")
         content = data.get("content", "")
-        source = data.get("source", "")
+        source = data.get("source", "human")
         tags = data.get("tags", [])
         do_upsert = data.get("upsert", False)
-        if source:
-            content = f"**Source:** {source}\n\n{content}"
-        payload = NoteCreate(title=title, content=content, tags=tags)
+        payload = NoteCreate(title=title, content=content, tags=tags, source=source)
 
         conn = initialize()
         try:
