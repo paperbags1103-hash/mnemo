@@ -79,6 +79,12 @@ class DatabaseManager:
                 )
                 """
             )
+            # add enrichment_status to note if missing
+            try:
+                await connection.execute("ALTER TABLE note ADD COLUMN enrichment_status TEXT DEFAULT NULL")
+                await connection.commit()
+            except Exception:
+                pass
             # migrate existing note_link if columns missing
             for col, defn in [
                 ("confidence", "REAL NOT NULL DEFAULT 1.0"),
@@ -271,6 +277,35 @@ class DatabaseManager:
             return note, False
         note = await self.create_note(payload)
         return note, True
+
+    async def request_enrichment(self, note_id: str) -> bool:
+        async with aiosqlite.connect(self.sqlite_path) as connection:
+            cursor = await connection.execute(
+                "UPDATE note SET enrichment_status = 'pending' WHERE id = ?", (note_id,)
+            )
+            await connection.commit()
+            return cursor.rowcount > 0
+
+    async def set_enrichment_status(self, note_id: str, status: str) -> None:
+        async with aiosqlite.connect(self.sqlite_path) as connection:
+            await connection.execute(
+                "UPDATE note SET enrichment_status = ? WHERE id = ?", (status, note_id)
+            )
+            await connection.commit()
+
+    async def list_pending_enrichments(self, limit: int = 10) -> list[dict]:
+        async with aiosqlite.connect(self.sqlite_path) as connection:
+            connection.row_factory = aiosqlite.Row
+            cursor = await connection.execute(
+                """SELECT id, title, content, tags FROM note
+                   WHERE enrichment_status = 'pending'
+                   ORDER BY datetime(updated_at) ASC LIMIT ?""",
+                (limit,),
+            )
+            rows = await cursor.fetchall()
+            import json as _json
+            return [{"id": r["id"], "title": r["title"],
+                     "content": r["content"], "tags": _json.loads(r["tags"] or "[]")} for r in rows]
 
     async def create_link(self, source_id: str, target_id: str, link_type: str = "manual",
                           confidence: float = 1.0, rationale: str | None = None,

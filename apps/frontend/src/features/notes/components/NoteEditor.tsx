@@ -86,15 +86,13 @@ export function NoteEditor() {
 
   const handleEnrich = useCallback(async () => {
     if (!note) return;
-    // Save first, then enrich
-    saveNote(buildDraft());
+    saveNote(buildDraft()); // save first
     setEnriching(true);
     try {
-      await api.post(`/api/v1/notes/${note.id}/enrich`);
-      await queryClient.invalidateQueries({ queryKey: ["note", note.id] });
-      await queryClient.invalidateQueries({ queryKey: ["notes"] });
+      await api.post(`/api/v1/notes/${note.id}/request-enrich`);
+      // Status is now "pending" — 치레 will process on next heartbeat
     } catch (e) {
-      console.error("Enrich failed", e);
+      console.error("Enrich request failed", e);
     } finally {
       setEnriching(false);
     }
@@ -212,10 +210,10 @@ export function NoteEditor() {
                     ? "border-[#e0e0de] bg-[#f7f7f5] text-[#ababaa]"
                     : "border-[#e0e0de] bg-[#f7f7f5] text-[#6b6b69] hover:border-[#1a1a1a] hover:text-[#1a1a1a]"
                 )}
-                title="AI가 요약+분류+태그를 자동으로 채워줍니다"
+                title="치레가 요약+분류+태그를 자동으로 채워줍니다 (5~10분)"
               >
                 <Sparkles size={11} />
-                {enriching ? "처리 중..." : "AI"}
+                {enriching ? "요청 중..." : "AI"}
               </button>
               <button
                 onClick={handleSave}
