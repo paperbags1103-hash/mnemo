@@ -107,7 +107,7 @@ export function NotesSidebar({ onDeletedNote }: NotesSidebarProps) {
         {tagsData?.tags.length ? (
           <div className="max-h-28 overflow-y-auto">
             <div className="flex flex-wrap gap-2">
-              {tagsData.tags.map((tag) => {
+              {tagsData.tags.filter((tag) => !tag.startsWith("cat:")).map((tag) => {
                 const isActive = selectedTag === tag;
                 return (
                   <button

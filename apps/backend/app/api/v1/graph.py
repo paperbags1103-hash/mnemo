@@ -51,7 +51,10 @@ async def get_notes_graph() -> NotesGraphResponse:
 
     edges: list[GraphEdge] = []
     for tag, note_ids in sorted(tag_map.items()):
-        for source, target in combinations(sorted(set(note_ids)), 2):
+        unique_ids = sorted(set(note_ids))
+        if len(unique_ids) > 5:  # skip overly common tags to avoid edge explosion
+            continue
+        for source, target in combinations(unique_ids, 2):
             edges.append(GraphEdge(source=source, target=target, shared_tag=tag))
 
     return NotesGraphResponse(nodes=nodes, edges=edges)
