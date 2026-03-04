@@ -24,9 +24,17 @@ def extract_category(tags: list[str] | None) -> str:
 
 
 def apply_category_tag(tags: list[str] | None, category: str | None) -> list[str]:
+    # If tags already contain a cat: tag, honour it (unless category is explicitly non-default)
+    existing_cat = next((t[len(CATEGORY_TAG_PREFIX):] for t in (tags or []) if t.startswith(CATEGORY_TAG_PREFIX)), None)
     normalized_tags = [tag for tag in tags or [] if not tag.startswith(CATEGORY_TAG_PREFIX)]
-    normalized_category = (category or DEFAULT_CATEGORY).strip() or DEFAULT_CATEGORY
-    return [f"{CATEGORY_TAG_PREFIX}{normalized_category}", *normalized_tags]
+    # Prefer explicit category param > existing cat: tag > default
+    if category and category != DEFAULT_CATEGORY:
+        final_category = category.strip() or DEFAULT_CATEGORY
+    elif existing_cat:
+        final_category = existing_cat
+    else:
+        final_category = DEFAULT_CATEGORY
+    return [f"{CATEGORY_TAG_PREFIX}{final_category}", *normalized_tags]
 
 
 class NoteBase(SQLModel):
