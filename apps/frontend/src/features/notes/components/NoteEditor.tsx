@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Placeholder from "@tiptap/extension-placeholder";
 import { EditorContent, useEditor } from "@tiptap/react";
+import { cn } from "@/lib/utils";
 import StarterKit from "@tiptap/starter-kit";
 import { useNote, useUpdateNote } from "@/features/notes/hooks/useNotes";
 import { useNotesStore } from "@/features/notes/store";
@@ -175,12 +176,25 @@ export function NoteEditor() {
               <>
                 <span>·</span>
                 <span className={savingState === "error" ? "text-red-400" : "text-[#ababaa]"}>{saveStatusText}</span>
-                {savingState === "error" && (
-                  <button onClick={handleSave} className="text-red-400 underline">재시도</button>
-                )}
               </>
             )}
-            <span className="ml-auto text-[10px] text-[#d0d0ce]">Cmd+S</span>
+            <div className="ml-auto flex items-center gap-2">
+              {savingState === "error" && (
+                <button onClick={handleSave} className="text-red-400 underline text-[10px]">재시도</button>
+              )}
+              <button
+                onClick={handleSave}
+                className={cn(
+                  "rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                  savingState === "saving"
+                    ? "bg-[#f0f0ed] text-[#ababaa]"
+                    : "bg-[#1a1a1a] text-white hover:bg-[#333]"
+                )}
+                disabled={savingState === "saving"}
+              >
+                {savingState === "saving" ? "저장 중..." : "저장"}
+              </button>
+            </div>
           </div>
 
           <div className="border-t border-[#f0f0ed] mb-8" />
