@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode, useCallback, useEffect, useState } from "react";
-import { FileText, LayoutList, Network } from "lucide-react";
+import { Columns2, FileText, LayoutList, Network } from "lucide-react";
 import { NavLink, Route, Routes } from "react-router-dom";
 import { DigestPage } from "@/features/digest/DigestPage";
 import { GraphView } from "@/features/graph/components/GraphView";
@@ -61,7 +61,9 @@ function NotesScreen({ onCreateNote }: { onCreateNote: () => Promise<void> }) {
   const { selectedNoteId } = useNotesStore();
   const sidebarResize = useResize("mnemo-sidebar-width", 260, 180, 420, "right");
   const panelResize = useResize("mnemo-panel-width", 260, 180, 420, "left");
-  const [centerTab, setCenterTab] = useState<"editor" | "graph">("editor");
+  const [centerMode, setCenterMode] = useState<"editor" | "graph" | "split">("editor");
+  const splitResize = useResize("mnemo-split-width", 500, 200, 800, "right");
+  // splitResize stores px; we use it as flex-basis on the editor pane
 
   return (
     <div className="flex min-w-0 flex-1 overflow-hidden">
@@ -71,33 +73,45 @@ function NotesScreen({ onCreateNote }: { onCreateNote: () => Promise<void> }) {
       </div>
       <ResizeHandle onMouseDown={sidebarResize.onMouseDown} />
 
-      {/* Center — editor or graph */}
+      {/* Center — editor / graph / split */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Tab bar */}
         <div className="flex items-center gap-1 border-b border-[#e9e9e7] bg-[#fafafa] px-4 py-1.5">
-          <button
-            onClick={() => setCenterTab("editor")}
-            className={cn(
-              "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-              centerTab === "editor" ? "bg-[#1a1a1a] text-white" : "text-[#9b9b9b] hover:text-[#1a1a1a]"
-            )}
-          >
-            <FileText size={11} />
-            노트
-          </button>
-          <button
-            onClick={() => setCenterTab("graph")}
-            className={cn(
-              "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-              centerTab === "graph" ? "bg-[#1a1a1a] text-white" : "text-[#9b9b9b] hover:text-[#1a1a1a]"
-            )}
-          >
-            <Network size={11} />
-            그래프
-          </button>
+          {([
+            { id: "editor", icon: <FileText size={11} />, label: "노트" },
+            { id: "graph",  icon: <Network size={11} />,  label: "그래프" },
+            { id: "split",  icon: <Columns2 size={11} />, label: "분할" },
+          ] as const).map(({ id, icon, label }) => (
+            <button
+              key={id}
+              onClick={() => setCenterMode(id)}
+              className={cn(
+                "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                centerMode === id ? "bg-[#1a1a1a] text-white" : "text-[#9b9b9b] hover:text-[#1a1a1a]"
+              )}
+            >
+              {icon}{label}
+            </button>
+          ))}
         </div>
+
+        {/* Content */}
         <div className="min-w-0 flex-1 overflow-hidden">
-          {centerTab === "editor" ? <NoteEditor /> : <GraphView />}
+          {centerMode === "editor" && <NoteEditor />}
+          {centerMode === "graph"  && <GraphView />}
+          {centerMode === "split"  && (
+            <div className="flex h-full">
+              {/* Editor pane */}
+              <div style={{ width: splitResize.size, flexShrink: 0 }} className="min-w-0 overflow-hidden border-r border-[#e9e9e7]">
+                <NoteEditor />
+              </div>
+              <ResizeHandle onMouseDown={splitResize.onMouseDown} />
+              {/* Graph pane */}
+              <div className="min-w-0 flex-1 overflow-hidden">
+                <GraphView />
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
