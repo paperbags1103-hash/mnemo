@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -17,21 +18,26 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await db.initialize()
-    worker_task = asyncio.create_task(run_worker(interval_seconds=10))
+    # Skip background worker in serverless environments (Vercel, Lambda)
+    is_serverless = bool(os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+    worker_task = None
+    if not is_serverless:
+        worker_task = asyncio.create_task(run_worker(interval_seconds=10))
 
-    def on_worker_done(task: asyncio.Task) -> None:
-        if not task.cancelled():
-            exc = task.exception()
-            if exc:
-                logger.error("Ingest worker stopped unexpectedly: %s", exc)
+        def on_worker_done(task: asyncio.Task) -> None:
+            if not task.cancelled():
+                exc = task.exception()
+                if exc:
+                    logger.error("Ingest worker stopped unexpectedly: %s", exc)
 
-    worker_task.add_done_callback(on_worker_done)
+        worker_task.add_done_callback(on_worker_done)
     yield
-    worker_task.cancel()
-    try:
-        await worker_task
-    except asyncio.CancelledError:
-        pass
+    if worker_task:
+        worker_task.cancel()
+        try:
+            await worker_task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
