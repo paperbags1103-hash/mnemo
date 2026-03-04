@@ -16,6 +16,7 @@ class NoteBase(SQLModel):
     content: str = Field(default="", max_length=1_000_000)
     folder_id: str | None = Field(default=None, max_length=255)
     tags: list[str] = Field(default_factory=list)
+    source_ref: str | None = Field(default=None, max_length=1024, description="Origin of the content (URL, book title, etc.)")
 
 
 class Note(NoteBase):

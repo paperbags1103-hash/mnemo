@@ -147,6 +147,7 @@ class DatabaseManager:
             content=payload.content,
             folder_id=payload.folder_id,
             tags=payload.tags,
+            source_ref=payload.source_ref,
             created_at=created_at,
             updated_at=created_at,
             version=1,
@@ -154,8 +155,8 @@ class DatabaseManager:
         async with aiosqlite.connect(self.sqlite_path) as connection:
             await connection.execute(
                 """
-                INSERT INTO note (id, title, content, folder_id, tags, created_at, updated_at, version)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO note (id, title, content, folder_id, tags, created_at, updated_at, version, source_ref)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     str(note.id),
@@ -166,6 +167,7 @@ class DatabaseManager:
                     note.created_at.isoformat(),
                     note.updated_at.isoformat(),
                     note.version,
+                    note.source_ref,
                 ),
             )
             await connection.execute(
@@ -451,6 +453,7 @@ class DatabaseManager:
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
             version=row["version"],
+            source_ref=row["source_ref"] if "source_ref" in row.keys() else None,
         )
 
     @staticmethod

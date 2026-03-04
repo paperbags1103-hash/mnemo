@@ -18,6 +18,7 @@ class WebhookPayload(BaseModel):
     content: str = ""
     tags: list[str] = Field(default_factory=list)
     source: str = ""
+    source_ref: str = Field(default="", description="Origin URL, book title, or other reference")
     upsert: bool = False
 
 
@@ -32,6 +33,7 @@ async def webhook_save(payload: WebhookPayload) -> NoteRead:
         content=content,
         folder_id=None,
         tags=payload.tags,
+        source_ref=payload.source_ref or None,
     )
 
     if payload.upsert:
