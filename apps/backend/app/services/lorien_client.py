@@ -65,10 +65,9 @@ class LorienClient:
 
             await loop.run_in_executor(
                 None,
-                lambda: memory.ingest_text(
+                lambda: memory.ingester.ingest_text(
                     text_clean,
                     source=f"mnemo:note:{note_id}",
-                    keyword_only=True,
                 ),
             )
             return True
