@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Link2, Network, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useNotesStore } from "@/features/notes/store";
 import { useKnowledgeGraph } from "@/features/graph/hooks/useGraphData";
@@ -9,7 +9,6 @@ import { useKnowledgeGraph } from "@/features/graph/hooks/useGraphData";
 type Backlink = {
   source_id: string;
   title: string;
-  link_type: string;
   confidence: number;
   rationale: string | null;
   status: string;
@@ -33,25 +32,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   기타: "#6b7280",
 };
 
-// ── hooks ──────────────────────────────────────────────
-function useBacklinks(noteId: string | null) {
-  return useQuery({
-    queryKey: ["backlinks", noteId],
-    queryFn: () => api.get<Backlink[]>(`/api/v1/links/${noteId}/backlinks`),
-    enabled: !!noteId,
-  });
-}
-
-function usePendingLinks(noteId: string | null) {
-  return useQuery({
-    queryKey: ["pending-links", noteId],
-    queryFn: () => api.get<PendingLink[]>(`/api/v1/links/pending`),
-    enabled: !!noteId,
-    select: (data) => data.filter((l) => l.target_id === noteId),
-  });
-}
-
-// ── EgoGraph ───────────────────────────────────────────
+// ── vis-network loader ─────────────────────────────────
 declare global {
   interface Window {
     vis?: {
@@ -79,6 +60,7 @@ function loadVis() {
   return visPromise;
 }
 
+// ── EgoGraph (always visible, Obsidian-style) ──────────
 function EgoGraph({ noteId }: { noteId: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const { setSelectedNoteId } = useNotesStore();
@@ -87,16 +69,11 @@ function EgoGraph({ noteId }: { noteId: string }) {
   useEffect(() => {
     if (!data || !containerRef.current) return;
 
-    // build ego-network: current note + 1-hop neighbours
-    const connected = new Set<string>();
-    connected.add(noteId);
+    const connected = new Set<string>([noteId]);
     const egoEdges = data.edges.filter(
       (e) => e.source === noteId || e.target === noteId,
     );
-    egoEdges.forEach((e) => {
-      connected.add(e.source);
-      connected.add(e.target);
-    });
+    egoEdges.forEach((e) => { connected.add(e.source); connected.add(e.target); });
     const egoNodes = data.nodes.filter((n) => connected.has(n.id));
 
     let disposed = false;
@@ -108,17 +85,17 @@ function EgoGraph({ noteId }: { noteId: string }) {
       const nodes = new window.vis.DataSet(
         egoNodes.map((n) => ({
           id: n.id,
-          label: n.id === noteId ? n.title : n.title.length > 16 ? n.title.slice(0, 15) + "…" : n.title,
+          label: n.id === noteId
+            ? (n.title.length > 14 ? n.title.slice(0, 13) + "…" : n.title)
+            : (n.title.length > 12 ? n.title.slice(0, 11) + "…" : n.title),
           color: {
-            background: n.id === noteId
-              ? (CATEGORY_COLORS[n.category] ?? "#6b7280")
-              : "#f0f0ed",
-            border: n.id === noteId ? "#1a1a1a" : "#d6d6d3",
+            background: n.id === noteId ? (CATEGORY_COLORS[n.category] ?? "#6b7280") : "#e9e9e7",
+            border: n.id === noteId ? "#1a1a1a" : "#d0d0ce",
             highlight: { background: CATEGORY_COLORS[n.category] ?? "#6b7280", border: "#1a1a1a" },
           },
-          font: { color: "#1a1a1a", size: n.id === noteId ? 13 : 11, face: "system-ui" },
+          font: { color: n.id === noteId ? "#ffffff" : "#3a3a38", size: 10, face: "system-ui", bold: n.id === noteId ? "true" : "" },
           shape: "dot",
-          size: n.id === noteId ? 18 : 10,
+          size: n.id === noteId ? 16 : 9,
           borderWidth: n.id === noteId ? 2 : 1,
         })),
       );
@@ -127,8 +104,9 @@ function EgoGraph({ noteId }: { noteId: string }) {
           from: e.source,
           to: e.target,
           title: e.shared_tag,
-          color: "#d6d6d3",
+          color: { color: "#d0d0ce", highlight: "#9b9b9b" },
           smooth: { type: "dynamic" },
+          width: 1,
         })),
       );
 
@@ -137,10 +115,13 @@ function EgoGraph({ noteId }: { noteId: string }) {
         { nodes, edges },
         {
           autoResize: true,
-          interaction: { hover: true, zoomView: false },
+          interaction: { hover: true, zoomView: true, dragView: true },
           nodes: { borderWidth: 1 },
           edges: { width: 1 },
-          physics: { stabilization: true, barnesHut: { springLength: 80 } },
+          physics: {
+            stabilization: { iterations: 100 },
+            barnesHut: { springLength: 70, springConstant: 0.05, damping: 0.3 },
+          },
         },
       );
       network.on("click", (params) => {
@@ -149,25 +130,26 @@ function EgoGraph({ noteId }: { noteId: string }) {
       });
     });
 
-    return () => {
-      disposed = true;
-      network?.destroy();
-    };
+    return () => { disposed = true; network?.destroy(); };
   }, [data, noteId, setSelectedNoteId]);
 
   if (isLoading) return (
-    <div className="flex h-40 items-center justify-center">
-      <Loader2 size={16} className="animate-spin text-[#9b9b9b]" />
+    <div className="flex h-40 items-center justify-center bg-[#f5f5f3] rounded-lg">
+      <Loader2 size={14} className="animate-spin text-[#9b9b9b]" />
     </div>
   );
-  if (!data) return null;
 
-  const hopCount = data.edges.filter((e) => e.source === noteId || e.target === noteId).length;
+  const hopCount = data?.edges.filter((e) => e.source === noteId || e.target === noteId).length ?? 0;
+
   return (
-    <div>
-      <p className="mb-1 text-[10px] text-[#9b9b9b]">{hopCount}개 직접 연결</p>
-      <div ref={containerRef} style={{ height: 220, borderRadius: 8, background: "#fafafa", border: "1px solid #e9e9e7" }} />
-      <p className="mt-1.5 text-[9px] text-[#b0b0ad]">클릭하면 해당 노트로 이동</p>
+    <div className="mb-1">
+      <div
+        ref={containerRef}
+        style={{ height: 200, borderRadius: 8, background: "#f7f7f5", border: "1px solid #e9e9e7" }}
+      />
+      <p className="mt-1 text-[9px] text-[#b0b0ad]">
+        {hopCount}개 연결 · 클릭해서 이동
+      </p>
     </div>
   );
 }
@@ -178,25 +160,81 @@ function Section({
 }: { title: string; count: number; children: React.ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="mb-4">
-      <button className="flex w-full items-center gap-1.5 py-1 text-left" onClick={() => setOpen((o) => !o)}>
-        {open ? <ChevronDown size={12} className="text-[#9b9b9b]" /> : <ChevronRight size={12} className="text-[#9b9b9b]" />}
-        <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#9b9b9b]">{title}</span>
-        <span className="ml-1 rounded-full bg-[#f0f0ed] px-1.5 py-0.5 text-[9px] text-[#7a7a78]">{count}</span>
+    <div className="mb-3">
+      <button className="flex w-full items-center gap-1 py-1 text-left" onClick={() => setOpen((o) => !o)}>
+        {open ? <ChevronDown size={11} className="text-[#b0b0ad]" /> : <ChevronRight size={11} className="text-[#b0b0ad]" />}
+        <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#9b9b9b]">{title}</span>
+        {count > 0 && (
+          <span className="ml-1 rounded-full bg-[#eeeeed] px-1.5 py-0.5 text-[9px] text-[#7a7a78]">{count}</span>
+        )}
       </button>
-      {open && <div className="mt-1">{children}</div>}
+      {open && <div className="mt-0.5">{children}</div>}
     </div>
   );
 }
 
-// ── Main component ─────────────────────────────────────
+// ── Related by tags (from graph data) ─────────────────
+function RelatedByTags({ noteId }: { noteId: string }) {
+  const { setSelectedNoteId } = useNotesStore();
+  const { data } = useKnowledgeGraph();
+  if (!data) return null;
+
+  const connectedIds = new Set(
+    data.edges
+      .filter((e) => e.source === noteId || e.target === noteId)
+      .flatMap((e) => [e.source, e.target])
+      .filter((id) => id !== noteId),
+  );
+  const related = data.nodes.filter((n) => connectedIds.has(n.id)).slice(0, 6);
+
+  return (
+    <Section title="관련 노트" count={related.length} defaultOpen>
+      {related.length === 0 ? (
+        <p className="px-1 text-[10px] italic text-[#c0c0be]">공유 태그 없음</p>
+      ) : (
+        related.map((n) => (
+          <button
+            key={n.id}
+            className="mb-0.5 flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-xs text-[#1a1a1a] hover:bg-[#f0f0ed]"
+            onClick={() => setSelectedNoteId(n.id)}
+          >
+            <span
+              className="h-1.5 w-1.5 shrink-0 rounded-full"
+              style={{ background: CATEGORY_COLORS[n.category] ?? "#6b7280" }}
+            />
+            <span className="truncate">{n.title}</span>
+          </button>
+        ))
+      )}
+    </Section>
+  );
+}
+
+// ── hooks ──────────────────────────────────────────────
+function useBacklinks(noteId: string | null) {
+  return useQuery({
+    queryKey: ["backlinks", noteId],
+    queryFn: () => api.get<Backlink[]>(`/api/v1/links/${noteId}/backlinks`),
+    enabled: !!noteId,
+  });
+}
+
+function usePendingLinks(noteId: string | null) {
+  return useQuery({
+    queryKey: ["pending-links", noteId],
+    queryFn: () => api.get<PendingLink[]>(`/api/v1/links/pending`),
+    enabled: !!noteId,
+    select: (data) => data.filter((l) => l.target_id === noteId),
+  });
+}
+
+// ── Main ───────────────────────────────────────────────
 export function BacklinksPanel({ noteId }: { noteId: string | null }) {
   const { setSelectedNoteId } = useNotesStore();
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<"links" | "graph">("links");
 
   const { data: backlinks = [], isLoading: blLoading } = useBacklinks(noteId);
-  const { data: pending = [], isLoading: pendingLoading } = usePendingLinks(noteId);
+  const { data: pending = [] } = usePendingLinks(noteId);
 
   const updateStatus = useMutation({
     mutationFn: ({ sourceId, targetId, status }: { sourceId: string; targetId: string; status: string }) =>
@@ -207,136 +245,72 @@ export function BacklinksPanel({ noteId }: { noteId: string | null }) {
     },
   });
 
+  if (!noteId) {
+    return (
+      <aside className="w-60 shrink-0 border-l border-[#e9e9e7] bg-[#fafafa] px-4 py-5">
+        <p className="text-[10px] italic text-[#c0c0be]">노트를 선택하세요</p>
+      </aside>
+    );
+  }
+
   return (
-    <aside className="flex w-64 shrink-0 flex-col border-l border-[#e9e9e7] bg-[#fafafa]">
-      {/* Tab bar */}
-      <div className="flex border-b border-[#e9e9e7]">
-        <button
-          className={`flex flex-1 items-center justify-center gap-1.5 py-3 text-[11px] font-semibold transition-colors ${
-            tab === "links" ? "border-b-2 border-[#1a1a1a] text-[#1a1a1a]" : "text-[#9b9b9b] hover:text-[#5a5a58]"
-          }`}
-          onClick={() => setTab("links")}
-        >
-          <Link2 size={11} />
-          Links
-        </button>
-        <button
-          className={`flex flex-1 items-center justify-center gap-1.5 py-3 text-[11px] font-semibold transition-colors ${
-            tab === "graph" ? "border-b-2 border-[#1a1a1a] text-[#1a1a1a]" : "text-[#9b9b9b] hover:text-[#5a5a58]"
-          }`}
-          onClick={() => setTab("graph")}
-        >
-          <Network size={11} />
-          Graph
-        </button>
-      </div>
+    <aside className="flex w-60 shrink-0 flex-col overflow-y-auto border-l border-[#e9e9e7] bg-[#fafafa] px-4 py-4">
+      {/* Graph — always visible, Obsidian style */}
+      <EgoGraph noteId={noteId} />
 
-      <div className="flex-1 overflow-y-auto px-4 py-4">
-        {tab === "graph" ? (
-          noteId ? (
-            <EgoGraph noteId={noteId} />
-          ) : (
-            <p className="text-[10px] text-[#b0b0ad] italic">노트를 선택하면 그래프가 표시됩니다</p>
-          )
-        ) : (
-          <>
-            {/* Pending (agent proposed) */}
-            {pending.length > 0 && (
-              <Section title="승인 대기" count={pending.length}>
-                {pendingLoading ? (
-                  <Loader2 size={12} className="animate-spin text-[#9b9b9b]" />
-                ) : (
-                  pending.map((link) => (
-                    <div key={`${link.source_id}-${link.target_id}`} className="mb-3 rounded-lg border border-[#e9e9e7] bg-white p-3">
-                      <button
-                        className="text-left text-xs font-medium text-[#1a1a1a] hover:text-[#4c6a91]"
-                        onClick={() => setSelectedNoteId(link.source_id)}
-                      >
-                        {link.source_title}
-                      </button>
-                      {link.rationale && (
-                        <p className="mt-1 text-[10px] leading-relaxed text-[#7a7a78] italic">"{link.rationale}"</p>
-                      )}
-                      <div className="mt-1 text-[9px] text-[#9b9b9b]">신뢰도 {Math.round((link.confidence ?? 1) * 100)}%</div>
-                      <div className="mt-2 flex gap-2">
-                        <button
-                          className="flex-1 rounded bg-[#2563eb] py-1 text-[10px] font-semibold text-white hover:bg-[#1d4ed8]"
-                          onClick={() => updateStatus.mutate({ sourceId: link.source_id, targetId: link.target_id, status: "confirmed" })}
-                        >✓ 확인</button>
-                        <button
-                          className="flex-1 rounded bg-[#f0f0ed] py-1 text-[10px] font-semibold text-[#7a7a78] hover:bg-[#e5e5e2]"
-                          onClick={() => updateStatus.mutate({ sourceId: link.source_id, targetId: link.target_id, status: "rejected" })}
-                        >✗ 거부</button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </Section>
-            )}
+      <div className="my-3 border-t border-[#e9e9e7]" />
 
-            {/* Backlinks */}
-            <Section title="이 노트를 참조한" count={backlinks.length}>
-              {blLoading ? (
-                <Loader2 size={12} className="animate-spin text-[#9b9b9b]" />
-              ) : backlinks.length === 0 ? (
-                <p className="text-[10px] text-[#b0b0ad] italic px-1">아직 링크 없음</p>
-              ) : (
-                backlinks.map((bl) => (
-                  <button
-                    key={bl.source_id}
-                    className="mb-1 block w-full rounded-md px-2 py-1.5 text-left text-xs text-[#1a1a1a] hover:bg-[#f0f0ed]"
-                    onClick={() => setSelectedNoteId(bl.source_id)}
-                  >
-                    {bl.title}
-                  </button>
-                ))
+      {/* Pending agent links */}
+      {pending.length > 0 && (
+        <Section title="승인 대기" count={pending.length}>
+          {pending.map((link) => (
+            <div key={`${link.source_id}-${link.target_id}`} className="mb-2 rounded-lg border border-[#e9e9e7] bg-white p-2.5">
+              <button
+                className="text-left text-xs font-medium text-[#1a1a1a] hover:text-[#4c6a91]"
+                onClick={() => setSelectedNoteId(link.source_id)}
+              >
+                {link.source_title}
+              </button>
+              {link.rationale && (
+                <p className="mt-1 text-[10px] leading-relaxed italic text-[#7a7a78]">"{link.rationale}"</p>
               )}
-            </Section>
-
-            {/* Related via tags — computed from graph data */}
-            <RelatedByTags noteId={noteId} />
-          </>
-        )}
-      </div>
-    </aside>
-  );
-}
-
-function RelatedByTags({ noteId }: { noteId: string | null }) {
-  const { setSelectedNoteId } = useNotesStore();
-  const { data } = useKnowledgeGraph();
-
-  if (!data || !noteId) return null;
-
-  const connectedIds = new Set(
-    data.edges
-      .filter((e) => e.source === noteId || e.target === noteId)
-      .flatMap((e) => [e.source, e.target])
-      .filter((id) => id !== noteId),
-  );
-  const related = data.nodes.filter((n) => connectedIds.has(n.id)).slice(0, 8);
-
-  return (
-    <Section title="관련 노트 (태그)" count={related.length} defaultOpen={false}>
-      {related.length === 0 ? (
-        <p className="text-[10px] text-[#b0b0ad] italic px-1">공유 태그 없음</p>
-      ) : (
-        related.map((n) => (
-          <button
-            key={n.id}
-            className="mb-1 block w-full rounded-md px-2 py-1.5 text-left text-xs text-[#1a1a1a] hover:bg-[#f0f0ed]"
-            onClick={() => setSelectedNoteId(n.id)}
-          >
-            <span className="font-medium">{n.title}</span>
-            <span
-              className="ml-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase"
-              style={{ background: `${CATEGORY_COLORS[n.category] ?? "#6b7280"}20`, color: CATEGORY_COLORS[n.category] ?? "#6b7280" }}
-            >
-              {n.category}
-            </span>
-          </button>
-        ))
+              <div className="mt-1 text-[9px] text-[#9b9b9b]">신뢰도 {Math.round((link.confidence ?? 1) * 100)}%</div>
+              <div className="mt-2 flex gap-1.5">
+                <button
+                  className="flex-1 rounded bg-[#2563eb] py-1 text-[10px] font-semibold text-white hover:bg-[#1d4ed8]"
+                  onClick={() => updateStatus.mutate({ sourceId: link.source_id, targetId: link.target_id, status: "confirmed" })}
+                >✓</button>
+                <button
+                  className="flex-1 rounded bg-[#f0f0ed] py-1 text-[10px] font-semibold text-[#7a7a78] hover:bg-[#e5e5e2]"
+                  onClick={() => updateStatus.mutate({ sourceId: link.source_id, targetId: link.target_id, status: "rejected" })}
+                >✗</button>
+              </div>
+            </div>
+          ))}
+        </Section>
       )}
-    </Section>
+
+      {/* Backlinks */}
+      <Section title="링크된 노트" count={backlinks.length}>
+        {blLoading ? (
+          <Loader2 size={11} className="animate-spin text-[#9b9b9b]" />
+        ) : backlinks.length === 0 ? (
+          <p className="px-1 text-[10px] italic text-[#c0c0be]">링크 없음</p>
+        ) : (
+          backlinks.map((bl) => (
+            <button
+              key={bl.source_id}
+              className="mb-0.5 block w-full truncate rounded px-2 py-1 text-left text-xs text-[#1a1a1a] hover:bg-[#f0f0ed]"
+              onClick={() => setSelectedNoteId(bl.source_id)}
+            >
+              {bl.title}
+            </button>
+          ))
+        )}
+      </Section>
+
+      {/* Related via shared tags */}
+      <RelatedByTags noteId={noteId} />
+    </aside>
   );
 }
