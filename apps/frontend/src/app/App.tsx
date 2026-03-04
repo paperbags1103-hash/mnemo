@@ -1,6 +1,6 @@
-import { Component, type ErrorInfo, type ReactNode, useCallback, useEffect } from "react";
+import { Component, type ErrorInfo, type ReactNode, useCallback, useEffect, useState } from "react";
 import { FileText, LayoutList, Network } from "lucide-react";
-import { NavLink, Route, Routes, useLocation } from "react-router-dom";
+import { NavLink, Route, Routes } from "react-router-dom";
 import { DigestPage } from "@/features/digest/DigestPage";
 import { GraphView } from "@/features/graph/components/GraphView";
 import { NoteEditor } from "@/features/notes/components/NoteEditor";
@@ -8,14 +8,25 @@ import { NotesSidebar } from "@/features/notes/components/NotesSidebar";
 import { UnifiedPanel } from "@/features/panel/UnifiedPanel";
 import { useCreateNote } from "@/features/notes/hooks/useNotes";
 import { useNotesStore } from "@/features/notes/store";
+import { useResize } from "@/hooks/useResize";
 import { cn } from "@/lib/utils";
+
+// ── Resize handle ──────────────────────────────────────
+function ResizeHandle({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => void }) {
+  return (
+    <div
+      onMouseDown={onMouseDown}
+      className="w-1 shrink-0 cursor-col-resize transition-colors hover:bg-[#1a1a1a]/10 active:bg-[#1a1a1a]/20"
+      style={{ zIndex: 10 }}
+    />
+  );
+}
 
 // ── Icon nav ───────────────────────────────────────────
 function SidebarNav() {
   return (
     <aside className="flex h-full w-14 shrink-0 flex-col items-center justify-between border-r border-[#e9e9e7] bg-[#f7f7f5] py-4">
       <div className="flex flex-col items-center gap-1">
-        {/* Logo */}
         <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-lg bg-[#1a1a1a] text-[11px] font-bold text-white tracking-wider">
           m
         </div>
@@ -48,13 +59,53 @@ function SidebarNav() {
 // ── Notes screen ───────────────────────────────────────
 function NotesScreen({ onCreateNote }: { onCreateNote: () => Promise<void> }) {
   const { selectedNoteId } = useNotesStore();
+  const sidebarResize = useResize("mnemo-sidebar-width", 260, 180, 420, "right");
+  const panelResize = useResize("mnemo-panel-width", 260, 180, 420, "left");
+  const [centerTab, setCenterTab] = useState<"editor" | "graph">("editor");
+
   return (
     <div className="flex min-w-0 flex-1 overflow-hidden">
-      <NotesSidebar onCreateNote={() => void onCreateNote()} />
-      <div className="min-w-0 flex-1 overflow-hidden">
-        <NoteEditor />
+      {/* Left sidebar */}
+      <div style={{ width: sidebarResize.size, flexShrink: 0 }}>
+        <NotesSidebar onCreateNote={() => void onCreateNote()} />
       </div>
-      <UnifiedPanel noteId={selectedNoteId} />
+      <ResizeHandle onMouseDown={sidebarResize.onMouseDown} />
+
+      {/* Center — editor or graph */}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        {/* Tab bar */}
+        <div className="flex items-center gap-1 border-b border-[#e9e9e7] bg-[#fafafa] px-4 py-1.5">
+          <button
+            onClick={() => setCenterTab("editor")}
+            className={cn(
+              "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+              centerTab === "editor" ? "bg-[#1a1a1a] text-white" : "text-[#9b9b9b] hover:text-[#1a1a1a]"
+            )}
+          >
+            <FileText size={11} />
+            노트
+          </button>
+          <button
+            onClick={() => setCenterTab("graph")}
+            className={cn(
+              "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+              centerTab === "graph" ? "bg-[#1a1a1a] text-white" : "text-[#9b9b9b] hover:text-[#1a1a1a]"
+            )}
+          >
+            <Network size={11} />
+            그래프
+          </button>
+        </div>
+        <div className="min-w-0 flex-1 overflow-hidden">
+          {centerTab === "editor" ? <NoteEditor /> : <GraphView />}
+        </div>
+      </div>
+
+      <ResizeHandle onMouseDown={panelResize.onMouseDown} />
+      {/* Right panel */}
+      <div style={{ width: panelResize.size, flexShrink: 0 }}>
+        <UnifiedPanel noteId={selectedNoteId} />
+      </div>
     </div>
   );
 }
