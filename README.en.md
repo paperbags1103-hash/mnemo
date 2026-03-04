@@ -10,7 +10,7 @@
 
 mnemo is a local-first knowledge base where AI agents act as tireless librarians — collecting, summarizing, categorizing, and linking notes automatically. Humans only read well-organized knowledge.
 
-- **No LLM in the backend** — agents (like Chire/치레) handle all AI processing
+- **No LLM in the backend** — connected AI agents handle all AI processing
 - **Note-to-note graph** — tag-based connections, Obsidian-style clustering
 - **Agent-first API** — webhook, digest, enrichment queue, backlinks
 
@@ -69,7 +69,7 @@ npm run dev
 [content or URL] mnemo에 저장
 ```
 
-The agent (Chire) automatically:
+The connected AI agent automatically:
 1. Fetches content (if URL)
 2. Extracts title / summary / category / tags via Claude
 3. Saves to mnemo with structured format

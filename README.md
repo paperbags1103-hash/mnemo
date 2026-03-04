@@ -11,7 +11,7 @@
 mnemo는 AI 에이전트가 지식을 자동 수집·요약·분류·연결하고, 인간은 잘 정리된 지식베이스를 읽기만 하는 **로컬 우선 지식 관리 시스템**입니다.
 
 **핵심 철학:**
-- **백엔드에 LLM 없음** — 치레 같은 AI 에이전트가 모든 AI 처리 담당
+- **백엔드에 LLM 없음** — AI 에이전트가 모든 AI 처리 담당
 - **노트-to-노트 그래프** — 공유 태그 기반 연결, 옵시디언 스타일 클러스터링
 - **에이전트 우선 API** — webhook, digest, enrichment 대기열, 백링크
 
@@ -68,15 +68,15 @@ npm run dev
 1. http://localhost:5173 접속
 2. `Cmd+N` → 새 노트 생성
 3. 제목/본문 작성 → **저장** 버튼 또는 `Cmd+S`
-4. **✨ AI** 버튼 → 치레 heartbeat 때 자동으로 요약+분류+태그 처리 (~5분)
+4. **✨ AI** 버튼 → 연결된 AI 에이전트가 자동으로 요약+분류+태그 처리 (~5분)
 
-### B. Discord/Signal에서 치레가 저장
+### B. B. AI 에이전트가 Discord/Signal을 통해 저장
 
 ```
 [내용 또는 URL] mnemo에 저장
 ```
 
-치레(Chire)가 자동으로:
+AI 에이전트가 자동으로:
 1. URL이면 본문 수집
 2. Claude로 제목/요약/카테고리/태그 추출
 3. 아래 포맷으로 mnemo에 저장
@@ -168,15 +168,15 @@ mnemo-mcp
 사용자: ✨ AI 클릭
    ↓
 mnemo: enrichment_status = "pending"
-   ↓ (치레 heartbeat ~5분)
-치레: GET /api/v1/notes/enrichment/pending
-치레: Claude로 분석 → 제목/요약/카테고리/태그
-치레: POST /api/v1/notes/{id}/enrichment
+   ↓ (에이전트 heartbeat ~5분)
+에이전트: GET /api/v1/notes/enrichment/pending
+에이전트: LLM으로 분석 → 제목/요약/카테고리/태그
+에이전트: POST /api/v1/notes/{id}/enrichment
    ↓
 노트 자동 업데이트 완료
 ```
 
-**핵심 원칙:** mnemo 백엔드에 LLM 없음. 치레가 모든 AI 처리.
+**핵심 원칙:** mnemo 백엔드에 LLM 없음. 연결된 AI 에이전트가 모든 AI 처리.
 
 ---
 
@@ -203,7 +203,7 @@ GET /api/v1/search?q=여행&limit=5
 기본 카테고리: `투자 · 기술 · 문화 · 여행 · 일기 · 기타`
 
 - 에디터에서 `+` 버튼으로 카테고리 추가/삭제
-- 치레가 `cat:신규카테고리` 태그로 저장하면 자동 반영
+- AI 에이전트가 `cat:신규카테고리` 태그로 저장하면 자동 반영
 - 기본 카테고리는 삭제 불가
 
 ---
@@ -287,7 +287,7 @@ FastAPI 백엔드 (localhost:8000)
 - Notion 스타일 제목 (36px bold)
 - 카테고리 컬러 점 + 드롭다운
 - 저장 버튼 + Cmd+S
-- ✨ AI 버튼 (치레에게 enrichment 요청)
+- ✨ AI 버튼 (AI 에이전트에게 enrichment 요청)
 
 ### 그래프
 - 카테고리별 색상 클러스터 (barnesHut 물리 엔진)
