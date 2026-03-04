@@ -87,3 +87,32 @@ export function useDigest() {
     queryFn: () => api.get<DigestResponse>("/api/v1/digest"),
   });
 }
+
+export function useCategories() {
+  return useQuery({
+    queryKey: ["categories"],
+    queryFn: () => api.get<{ categories: string[] }>("/api/v1/categories"),
+    staleTime: 5 * 60 * 1000, // 5 min cache
+  });
+}
+
+export function useAddCategory() {
+  return useMutation({
+    mutationFn: (name: string) =>
+      api.post<{ ok: boolean; category: string }>("/api/v1/categories", { name }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+    },
+  });
+}
+
+export function useRemoveCategory() {
+  return useMutation({
+    mutationFn: (name: string) =>
+      api.delete<{ ok: boolean }>(`/api/v1/categories/${encodeURIComponent(name)}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      queryClient.invalidateQueries({ queryKey: NOTES_QUERY_KEY });
+    },
+  });
+}

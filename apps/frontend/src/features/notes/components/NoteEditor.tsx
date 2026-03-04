@@ -1,15 +1,15 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Placeholder from "@tiptap/extension-placeholder";
 import { EditorContent, useEditor } from "@tiptap/react";
-import { Sparkles } from "lucide-react";
+import { Plus, Sparkles, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import StarterKit from "@tiptap/starter-kit";
-import { useNote, useUpdateNote } from "@/features/notes/hooks/useNotes";
+import { useAddCategory, useCategories, useNote, useRemoveCategory, useUpdateNote } from "@/features/notes/hooks/useNotes";
 import { useNotesStore } from "@/features/notes/store";
 import {
-  NOTE_CATEGORIES,
+  DEFAULT_CATEGORIES,
   getNoteCategory,
   type NoteCategory,
 } from "@/features/notes/types";
@@ -32,9 +32,16 @@ export function NoteEditor() {
   const { data: note, isLoading } = useNote(selectedNoteId);
   const updateNote = useUpdateNote();
   const queryClient = useQueryClient();
+  const { data: categoriesData } = useCategories();
+  const addCategory = useAddCategory();
+  const removeCategory = useRemoveCategory();
+  const categories = categoriesData?.categories ?? [...DEFAULT_CATEGORIES];
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<NoteCategory>("기타");
   const [enriching, setEnriching] = useState(false);
+  const [showCatManager, setShowCatManager] = useState(false);
+  const [newCatInput, setNewCatInput] = useState("");
+  const catManagerRef = useRef<HTMLDivElement>(null);
 
   const editor = useEditor({
     extensions: [
@@ -165,16 +172,66 @@ export function NoteEditor() {
       {/* Document area */}
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[720px] px-16 pt-14 pb-20">
-          {/* Category dot + selector */}
-          <div className="mb-4 flex items-center gap-2">
+          {/* Category dot + selector + manage */}
+          <div className="relative mb-4 flex items-center gap-2">
             <span className="h-2 w-2 rounded-full" style={{ background: CAT_COLORS[category] ?? "#6b7280" }} />
             <select
               value={category}
               onChange={e => { setCategory(e.target.value as NoteCategory); setSavingState("idle"); }}
               className="bg-transparent text-xs text-[#9b9b9b] outline-none cursor-pointer hover:text-[#1a1a1a] transition-colors"
             >
-              {NOTE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              {categories.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
+            <button
+              onClick={() => setShowCatManager(v => !v)}
+              className="ml-1 text-[#d0d0ce] hover:text-[#9b9b9b] transition-colors"
+              title="카테고리 관리"
+            >
+              <Plus size={13} />
+            </button>
+            {/* Category manager popover */}
+            {showCatManager && (
+              <div ref={catManagerRef} className="absolute top-7 left-0 z-50 w-56 rounded-xl border border-[#e9e9e7] bg-white shadow-lg p-3">
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#ababaa]">카테고리 관리</p>
+                <ul className="mb-3 space-y-1">
+                  {categories.map(c => (
+                    <li key={c} className="flex items-center justify-between">
+                      <span className="text-xs text-[#1a1a1a]">{c}</span>
+                      {!DEFAULT_CATEGORIES.includes(c as never) && (
+                        <button
+                          onClick={() => { void removeCategory.mutateAsync(c); }}
+                          className="text-[#ababaa] hover:text-red-400 transition-colors"
+                        >
+                          <X size={11} />
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                <div className="flex gap-1">
+                  <input
+                    type="text"
+                    value={newCatInput}
+                    onChange={e => setNewCatInput(e.target.value)}
+                    placeholder="새 카테고리"
+                    className="flex-1 rounded-md border border-[#e9e9e7] px-2 py-1 text-xs outline-none focus:border-[#1a1a1a]"
+                    onKeyDown={e => {
+                      if (e.key === "Enter" && newCatInput.trim()) {
+                        void addCategory.mutateAsync(newCatInput.trim()).then(() => setNewCatInput(""));
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      if (newCatInput.trim()) void addCategory.mutateAsync(newCatInput.trim()).then(() => setNewCatInput(""));
+                    }}
+                    className="rounded-md bg-[#1a1a1a] px-2 py-1 text-[10px] text-white hover:bg-[#333]"
+                  >
+                    추가
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Title — document style */}

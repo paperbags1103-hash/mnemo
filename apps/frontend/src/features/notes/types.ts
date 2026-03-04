@@ -1,6 +1,6 @@
-export const NOTE_CATEGORIES = ["투자", "기술", "문화", "여행", "일기", "기타"] as const;
-
-export type NoteCategory = (typeof NOTE_CATEGORIES)[number];
+export const DEFAULT_CATEGORIES = ["투자", "기술", "문화", "여행", "일기", "기타"] as const;
+// Keep backward compat — treat NoteCategory as string for dynamic support
+export type NoteCategory = string;
 
 const CATEGORY_TAG_PREFIX = "cat:";
 
@@ -67,5 +67,5 @@ export type DigestResponse = {
 export function getNoteCategory(tags: string[]): NoteCategory {
   const categoryTag = tags.find((tag) => tag.startsWith(CATEGORY_TAG_PREFIX));
   const category = categoryTag?.slice(CATEGORY_TAG_PREFIX.length) ?? "기타";
-  return NOTE_CATEGORIES.includes(category as NoteCategory) ? (category as NoteCategory) : "기타";
+  return category || "기타";
 }

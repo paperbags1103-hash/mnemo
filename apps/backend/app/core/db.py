@@ -79,6 +79,14 @@ class DatabaseManager:
                 )
                 """
             )
+            # custom categories table
+            await connection.execute("""
+                CREATE TABLE IF NOT EXISTS category (
+                    name TEXT PRIMARY KEY,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )
+            """)
+            await connection.commit()
             # add enrichment_status to note if missing
             try:
                 await connection.execute("ALTER TABLE note ADD COLUMN enrichment_status TEXT DEFAULT NULL")
@@ -277,6 +285,63 @@ class DatabaseManager:
             return note, False
         note = await self.create_note(payload)
         return note, True
+
+    async def get_all_categories(self) -> list[str]:
+        """Collect categories: user-added + cat: tags from existing notes."""
+        import json as _json
+        async with aiosqlite.connect(self.sqlite_path) as connection:
+            # 1. Custom categories from table
+            cursor = await connection.execute("SELECT name FROM category ORDER BY created_at")
+            custom_rows = await cursor.fetchall()
+            custom = [r[0] for r in custom_rows]
+            # 2. cat: tags from notes
+            cursor = await connection.execute("SELECT tags FROM note WHERE tags IS NOT NULL AND tags != '[]'")
+            tag_rows = await cursor.fetchall()
+        seen: set[str] = set(custom)
+        from_notes: list[str] = []
+        for (raw,) in tag_rows:
+            try:
+                tags = _json.loads(raw)
+            except Exception:
+                continue
+            for tag in tags:
+                if isinstance(tag, str) and tag.startswith("cat:"):
+                    name = tag[4:]
+                    if name and name not in seen:
+                        seen.add(name)
+                        from_notes.append(name)
+        return custom + from_notes
+
+    async def add_custom_category(self, name: str) -> None:
+        async with aiosqlite.connect(self.sqlite_path) as connection:
+            await connection.execute(
+                "INSERT OR IGNORE INTO category (name) VALUES (?)", (name,)
+            )
+            await connection.commit()
+
+    async def remove_custom_category(self, name: str) -> None:
+        async with aiosqlite.connect(self.sqlite_path) as connection:
+            await connection.execute("DELETE FROM category WHERE name = ?", (name,))
+            await connection.commit()
+
+    async def replace_category_tag(self, old_name: str, new_name: str) -> None:
+        """Replace cat:old_name with cat:new_name across all notes."""
+        import json as _json
+        async with aiosqlite.connect(self.sqlite_path) as connection:
+            cursor = await connection.execute("SELECT id, tags FROM note")
+            rows = await cursor.fetchall()
+            for note_id, raw in rows:
+                try:
+                    tags = _json.loads(raw or "[]")
+                except Exception:
+                    continue
+                if f"cat:{old_name}" in tags:
+                    new_tags = [f"cat:{new_name}" if t == f"cat:{old_name}" else t for t in tags]
+                    await connection.execute(
+                        "UPDATE note SET tags = ? WHERE id = ?",
+                        (_json.dumps(new_tags, ensure_ascii=False), note_id)
+                    )
+            await connection.commit()
 
     async def request_enrichment(self, note_id: str) -> bool:
         async with aiosqlite.connect(self.sqlite_path) as connection:
