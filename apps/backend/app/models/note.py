@@ -24,14 +24,16 @@ def extract_category(tags: list[str] | None) -> str:
 
 
 def apply_category_tag(tags: list[str] | None, category: str | None) -> list[str]:
-    # If tags already contain a cat: tag, honour it (unless category is explicitly non-default)
+    # If tags already contain a cat: tag (possibly with subcategory like "기술/AI"),
+    # honour it — tags is the source of truth for category+subcategory.
+    # The category param is only used when there is no cat: tag in tags.
     existing_cat = next((t[len(CATEGORY_TAG_PREFIX):] for t in (tags or []) if t.startswith(CATEGORY_TAG_PREFIX)), None)
     normalized_tags = [tag for tag in tags or [] if not tag.startswith(CATEGORY_TAG_PREFIX)]
-    # Prefer explicit category param > existing cat: tag > default
-    if category and category != DEFAULT_CATEGORY:
-        final_category = category.strip() or DEFAULT_CATEGORY
-    elif existing_cat:
+    if existing_cat:
+        # Tags already carry the full category (+ optional subcategory); keep as-is
         final_category = existing_cat
+    elif category and category.strip():
+        final_category = category.strip()
     else:
         final_category = DEFAULT_CATEGORY
     return [f"{CATEGORY_TAG_PREFIX}{final_category}", *normalized_tags]
