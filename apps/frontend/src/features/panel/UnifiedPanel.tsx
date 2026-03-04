@@ -23,16 +23,6 @@ const ENTITY_COLORS: Record<string, string> = {
 };
 
 // ── vis-network loader ─────────────────────────────────
-declare global {
-  interface Window {
-    vis?: {
-      DataSet: new (items: unknown[]) => unknown;
-      Network: new (c: HTMLElement, d: { nodes: unknown; edges: unknown }, o: Record<string, unknown>) => {
-        on: (e: string, cb: (p: { nodes: string[] }) => void) => void; destroy: () => void; selectNodes: (ids: string[]) => void; focus: (id: string, opts?: Record<string, unknown>) => void;
-      };
-    };
-  }
-}
 let visP: Promise<void> | null = null;
 function loadVis() {
   if (window.vis) return Promise.resolve();
