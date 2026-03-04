@@ -14,3 +14,4 @@ apps/backend/.data/
 apps/backend/*.db
 apps/frontend/.vercel/
 .vercel
+apps/frontend/.env.production

@@ -7,11 +7,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "mnemo"
     api_v1_prefix: str = "/api/v1"
-    cors_origins: list[str] = ["http://localhost:5173", "http://localhost:4173"]
+    cors_origins: list[str] = ["http://localhost:5173", "http://localhost:4173", "http://localhost:8000"]
+    cors_extra: str = ""  # comma-separated extra origins from CORS_EXTRA env var
     turso_url: str | None = None
     turso_auth_token: str | None = None
     sqlite_path: str = "sqlite:///./mnemo.db"
-    lorien_db_path: str = "~/.openclaw/workspace/.lorien/db"
+    lorien_db_path: str = "~/.lorien/db"
+    lorien_src_path: str = ""  # path to lorien/src if installed from source
     mnemo_api_key: str = Field(default="", env="MNEMO_API_KEY")
     groq_api_key: str = Field(default="", env="GROQ_API_KEY")
 

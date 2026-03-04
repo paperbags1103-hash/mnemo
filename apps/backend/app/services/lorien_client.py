@@ -22,9 +22,19 @@ class LorienClient:
             return self._memory
 
         try:
-            lorien_src = Path("~/Documents/lorien/src").expanduser()
-            if lorien_src.exists() and str(lorien_src) not in sys.path:
-                sys.path.insert(0, str(lorien_src))
+            # Use LORIEN_SRC_PATH env var if set; fallback to common install locations
+            src_override = settings.lorien_src_path
+            candidate_paths = (
+                [Path(src_override).expanduser()] if src_override
+                else [
+                    Path("~/Documents/lorien/src").expanduser(),
+                    Path("~/.lorien/src").expanduser(),
+                ]
+            )
+            for lorien_src in candidate_paths:
+                if lorien_src.exists() and str(lorien_src) not in sys.path:
+                    sys.path.insert(0, str(lorien_src))
+                    break
 
             from lorien import LorienMemory
 
