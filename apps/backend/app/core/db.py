@@ -67,6 +67,31 @@ class DatabaseManager:
             )
             await connection.execute(
                 """
+                CREATE TABLE IF NOT EXISTS note_link (
+                    source_id TEXT NOT NULL,
+                    target_id TEXT NOT NULL,
+                    link_type TEXT NOT NULL DEFAULT 'manual',
+                    confidence REAL NOT NULL DEFAULT 1.0,
+                    rationale TEXT,
+                    status TEXT NOT NULL DEFAULT 'confirmed',
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (source_id, target_id)
+                )
+                """
+            )
+            # migrate existing note_link if columns missing
+            for col, defn in [
+                ("confidence", "REAL NOT NULL DEFAULT 1.0"),
+                ("rationale", "TEXT"),
+                ("status", "TEXT NOT NULL DEFAULT 'confirmed'"),
+            ]:
+                try:
+                    await connection.execute(f"ALTER TABLE note_link ADD COLUMN {col} {defn}")
+                    await connection.commit()
+                except Exception:
+                    pass
+            await connection.execute(
+                """
                 CREATE TABLE IF NOT EXISTS ingest_job (
                     id TEXT PRIMARY KEY,
                     note_id TEXT NOT NULL,
@@ -246,6 +271,101 @@ class DatabaseManager:
             return note, False
         note = await self.create_note(payload)
         return note, True
+
+    async def create_link(self, source_id: str, target_id: str, link_type: str = "manual",
+                          confidence: float = 1.0, rationale: str | None = None,
+                          status: str = "confirmed") -> None:
+        async with aiosqlite.connect(self.sqlite_path) as connection:
+            await connection.execute(
+                """
+                INSERT OR REPLACE INTO note_link (source_id, target_id, link_type, confidence, rationale, status, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (source_id, target_id, link_type, confidence, rationale, status, utcnow().isoformat()),
+            )
+            await connection.commit()
+
+    async def get_backlinks(self, note_id: str) -> list[dict]:
+        """Notes that link TO note_id."""
+        async with aiosqlite.connect(self.sqlite_path) as connection:
+            connection.row_factory = aiosqlite.Row
+            cursor = await connection.execute(
+                """
+                SELECT nl.source_id, nl.link_type, nl.confidence, nl.rationale, nl.status,
+                       n.title, n.tags
+                FROM note_link nl
+                JOIN note n ON n.id = nl.source_id
+                WHERE nl.target_id = ? AND nl.status != 'rejected'
+                ORDER BY nl.created_at DESC
+                """,
+                (note_id,),
+            )
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+    async def get_pending_links(self) -> list[dict]:
+        async with aiosqlite.connect(self.sqlite_path) as connection:
+            connection.row_factory = aiosqlite.Row
+            cursor = await connection.execute(
+                """
+                SELECT nl.source_id, nl.target_id, nl.confidence, nl.rationale, nl.status,
+                       ns.title as source_title, nt.title as target_title
+                FROM note_link nl
+                JOIN note ns ON ns.id = nl.source_id
+                JOIN note nt ON nt.id = nl.target_id
+                WHERE nl.status = 'pending'
+                ORDER BY nl.created_at DESC
+                """,
+            )
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+    async def update_link_status(self, source_id: str, target_id: str, status: str) -> bool:
+        async with aiosqlite.connect(self.sqlite_path) as connection:
+            cursor = await connection.execute(
+                "UPDATE note_link SET status = ? WHERE source_id = ? AND target_id = ?",
+                (status, source_id, target_id),
+            )
+            await connection.commit()
+            return cursor.rowcount > 0
+
+    async def get_digest(self, hours: int = 24, limit: int = 30) -> dict:
+        async with aiosqlite.connect(self.sqlite_path) as connection:
+            connection.row_factory = aiosqlite.Row
+            cursor = await connection.execute(
+                """
+                SELECT n.id, n.title, n.tags, n.created_at, n.source_ref,
+                       (SELECT COUNT(*) FROM note_link nl
+                        WHERE nl.source_id = n.id OR nl.target_id = n.id) as connection_count
+                FROM note n
+                WHERE datetime(n.created_at) > datetime('now', ?)
+                ORDER BY datetime(n.created_at) DESC
+                LIMIT ?
+                """,
+                (f"-{hours} hours", limit),
+            )
+            rows = await cursor.fetchall()
+            import json as _json
+            notes = []
+            by_category: dict[str, int] = {}
+            for row in rows:
+                tags = _json.loads(row["tags"] or "[]")
+                cat = next((t.replace("cat:", "") for t in tags if t.startswith("cat:")), "기타")
+                by_category[cat] = by_category.get(cat, 0) + 1
+                notes.append({
+                    "id": row["id"],
+                    "title": row["title"],
+                    "category": cat,
+                    "tags": [t for t in tags if not t.startswith("cat:")],
+                    "created_at": row["created_at"],
+                    "source": row["source_ref"] or "manual",
+                    "connection_count": row["connection_count"],
+                })
+            return {
+                "notes": notes,
+                "by_category": by_category,
+                "total": len(notes),
+            }
 
     async def ready_status(self) -> dict[str, str]:
         turso = "error"

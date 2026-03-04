@@ -113,13 +113,8 @@ export function GraphView() {
           data.edges.map((edge) => ({
             from: edge.source,
             to: edge.target,
-            label: edge.shared_tag,
+            title: edge.shared_tag,  // hover tooltip only
             color: "#d6d6d3",
-            font: {
-              color: "#9b9b9b",
-              face: "IBM Plex Sans",
-              size: 10,
-            },
             smooth: {
               type: "dynamic",
             },

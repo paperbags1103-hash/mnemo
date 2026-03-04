@@ -6,6 +6,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { Input } from "@/components/ui/input";
 import { useNote, useNoteLinks, useUpdateNote } from "@/features/notes/hooks/useNotes";
 import { useNotesStore } from "@/features/notes/store";
+import { BacklinksPanel } from "@/features/notes/components/BacklinksPanel";
 import {
   NOTE_CATEGORIES,
   getNoteCategory,
@@ -226,7 +227,8 @@ export function NoteEditor() {
   const hasLinks = backlinks.length > 0 || outlinks.length > 0;
 
   return (
-    <section className="relative flex h-full flex-col overflow-hidden bg-[#ffffff]">
+    <section className="relative flex h-full overflow-hidden bg-[#ffffff]">
+    <div className="flex flex-1 flex-col overflow-hidden">
       <div className="flex items-start justify-between gap-4 border-b border-[#e9e9e7] px-8 py-5">
         <Input
           className="h-auto border-0 bg-transparent px-0 text-3xl font-semibold text-[#1a1a1a] shadow-none focus-visible:ring-0"
@@ -308,6 +310,8 @@ export function NoteEditor() {
           </section>
         ) : null}
       </div>
+    </div>
+    <BacklinksPanel noteId={selectedNoteId} />
     </section>
   );
 }

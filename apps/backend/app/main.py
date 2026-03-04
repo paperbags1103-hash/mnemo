@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.v1 import graph, health, ingest, lorien, notes, search, tree, webhook
+from app.api.v1 import digest, graph, health, ingest, links, lorien, notes, search, tree, webhook
 from app.core.config import settings
 from app.core.db import db
 from app.workers.ingest_worker import run_worker
@@ -65,3 +65,5 @@ app.include_router(webhook.router, prefix=settings.api_v1_prefix)
 app.include_router(ingest.router, prefix=settings.api_v1_prefix)
 app.include_router(lorien.router, prefix=settings.api_v1_prefix)
 app.include_router(graph.router, prefix=settings.api_v1_prefix)
+app.include_router(digest.router, prefix=settings.api_v1_prefix)
+app.include_router(links.router, prefix=settings.api_v1_prefix)
