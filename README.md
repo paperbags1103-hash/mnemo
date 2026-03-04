@@ -1,196 +1,218 @@
 # mnemo
 
-**AI Agent's Obsidian** — AI 에이전트를 위한 지식 관리 시스템.
+> AI Agent's Obsidian — knowledge management built for agents, not humans.
 
-에이전트(치레/Chire)가 지식을 자동 수집·요약·분류하고, 인간은 잘 정리된 지식베이스를 읽기만 합니다.
-
-**Live:** https://mnemo-red.vercel.app · **Local:** http://localhost:5173
+**[한국어 문서 →](./README.ko.md)**
 
 ---
 
-## 핵심 개념
+## What is mnemo?
 
-| 개념 | 설명 |
-|------|------|
-| **에이전트 = 사서** | AI가 저장 전 요약+분류+태그 추출 처리 |
-| **mnemo = 순수 데이터 레이어** | 백엔드에 LLM 없음, 저장/검색/그래프만 |
-| **노트-to-노트 그래프** | 공유 태그 기반 자동 연결 (폴더 없음) |
-| **카테고리** | `투자 · 기술 · 문화 · 여행 · 일기 · 기타` |
+mnemo is a local-first knowledge base where AI agents act as tireless librarians — collecting, summarizing, categorizing, and linking notes automatically. Humans only read well-organized knowledge.
+
+- **No LLM in the backend** — agents (like Chire/치레) handle all AI processing
+- **Note-to-note graph** — tag-based connections, Obsidian-style clustering
+- **Agent-first API** — webhook, digest, enrichment queue, backlinks
 
 ---
 
-## 빠른 시작
+## Screenshots
 
-### 1. 백엔드
+> Split view: Notion-style editor + knowledge graph side-by-side.
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.11+
+- Node.js 20+
+- pnpm (`npm i -g pnpm`)
+
+### Backend
+
 ```bash
 cd apps/backend
 python -m venv .venv
 .venv/bin/pip install -r requirements.txt
+cp .env.example .env          # edit if needed
 .venv/bin/uvicorn app.main:app --port 8000 --reload
 ```
 
-### 2. 프론트엔드
+### Frontend
+
 ```bash
 cd apps/frontend
 npm install --legacy-peer-deps
 npm run dev
 ```
 
-- 프론트엔드: http://localhost:5173
-- 백엔드 API: http://localhost:8000
-- API 문서: http://localhost:8000/docs
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:8000
+- API Docs: http://localhost:8000/docs
 
 ---
 
-## 사용 방법
+## Usage
 
-### A. 앱에서 직접 작성
-1. http://localhost:5173 접속
-2. 좌측 사이드바 하단 **새 노트** 클릭 (또는 `Cmd+N`)
-3. 제목 입력 → 본문 작성
-4. **저장** 버튼 또는 `Cmd+S`
-5. **✨ AI** 버튼 클릭 → 치레가 다음 heartbeat(~5분)에 요약+분류+태그 자동 처리
+### A. Write directly in the app
 
-### B. AI 에이전트(치레)가 저장
-Discord/Signal에서 "mnemo에 저장" 발화 시:
+1. Open http://localhost:5173
+2. `Cmd+N` → new note
+3. Write → **Save** button or `Cmd+S`
+4. Click **✨ AI** → queues enrichment (agent processes on next heartbeat, ~5 min)
+
+### B. Agent saves via Discord/Signal
+
 ```
-[URL 또는 글] mnemo에 저장
+[content or URL] mnemo에 저장
 ```
-치레가 자동으로:
-1. 내용 수집 (URL이면 웹 fetch)
-2. Claude로 제목/요약/카테고리/태그 추출
-3. mnemo API로 저장
 
-### C. API 직접 호출
+The agent (Chire) automatically:
+1. Fetches content (if URL)
+2. Extracts title / summary / category / tags via Claude
+3. Saves to mnemo with structured format
+
+### C. API
+
 ```bash
-# 저장
+# Save note
 curl -X POST http://localhost:8000/api/v1/webhooks/save \
   -H "Content-Type: application/json" \
   -d '{
-    "title": "비트코인 투자 전략",
-    "content": "<p>내용...</p>",
+    "title": "Bitcoin halving cycle",
+    "content": "<p>Content here...</p>",
     "source": "https://example.com",
-    "tags": ["cat:투자", "비트코인"]
+    "tags": ["cat:기술", "bitcoin", "crypto"]
   }'
 
-# 검색
-curl "http://localhost:8000/api/v1/search?q=비트코인&limit=10"
+# Search
+curl "http://localhost:8000/api/v1/search?q=bitcoin&limit=10"
 
-# 목록
-curl "http://localhost:8000/api/v1/notes?limit=30"
+# 24h digest
+curl "http://localhost:8000/api/v1/digest?hours=24"
 ```
 
 ### D. MCP (Claude Desktop)
-`apps/mcp/` — FastMCP 기반 MCP 서버. Claude Desktop에서 직접 mnemo에 저장/검색 가능.
 
 ```bash
-cd apps/mcp && pip install -e . && mnemo-mcp
+cd apps/mcp
+pip install -e .
+mnemo-mcp
 ```
 
 ---
 
-## 저장 포맷 (에이전트 저장 시)
+## Note Format (agent saves)
 
 ```markdown
-# 제목
+# Title
 
-> 핵심 요약 2문장
+> Summary in 2 sentences
 
-본문 내용 (원문 또는 정리)
+Body content...
 
 ---
 출처: https://... · 2026-03-04
 ```
 
-태그: `["cat:기술", "비트코인", "블록체인"]`  
-→ `cat:` prefix = 카테고리 (하나만), 나머지 = 일반 태그
+Tags: `["cat:기술", "bitcoin", "blockchain"]`
+- `cat:` prefix = category (one per note)
+- rest = regular tags
 
 ---
 
-## AI Enrichment (✨ AI 버튼)
-
-앱에서 작성한 노트의 AI 처리 흐름:
+## AI Enrichment Flow (✨ AI button)
 
 ```
-사용자: ✨ AI 클릭
+User clicks ✨ AI
    ↓
 mnemo: enrichment_status = "pending"
-   ↓ (치레 heartbeat ~5분)
-치레: GET /api/v1/notes/enrichment/pending
-치레: Claude로 분석 → title/summary/category/tags
-치레: POST /api/v1/notes/{id}/enrichment
+   ↓  (~5 min later)
+Agent: GET /api/v1/notes/enrichment/pending
+Agent: Claude extracts → title / summary / category / tags
+Agent: POST /api/v1/notes/{id}/enrichment
    ↓
-노트 자동 업데이트
+Note auto-updated
 ```
 
-**핵심 원칙:** mnemo 백엔드에 LLM 없음. 치레가 모든 AI 처리 담당.
+---
+
+## API Reference
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/v1/notes` | List notes |
+| `GET` | `/api/v1/notes/{id}` | Get note |
+| `POST` | `/api/v1/webhooks/save` | Save note (agent) |
+| `PATCH` | `/api/v1/notes/{id}` | Update note |
+| `DELETE` | `/api/v1/notes/{id}` | Delete note |
+| `GET` | `/api/v1/search?q=` | Full-text search |
+| `GET` | `/api/v1/graph/notes` | Note graph |
+| `GET` | `/api/v1/digest?hours=24` | Agent activity feed |
+| `GET` | `/api/v1/categories` | List categories |
+| `POST` | `/api/v1/categories` | Add category |
+| `DELETE` | `/api/v1/categories/{name}` | Remove category |
+| `POST` | `/api/v1/notes/{id}/request-enrich` | Request AI enrichment |
+| `GET` | `/api/v1/notes/enrichment/pending` | Pending enrichment queue |
+| `POST` | `/api/v1/notes/{id}/enrichment` | Submit enrichment result |
+| `GET` | `/api/v1/notes/{id}/links` | Backlinks |
+| `POST` | `/api/v1/links` | Create link |
 
 ---
 
-## 주요 API
+## Environment Variables
 
-| Method | Endpoint | 설명 |
-|--------|----------|------|
-| `GET` | `/api/v1/notes` | 노트 목록 |
-| `GET` | `/api/v1/notes/{id}` | 노트 상세 |
-| `POST` | `/api/v1/webhooks/save` | 노트 저장 (에이전트용) |
-| `PATCH` | `/api/v1/notes/{id}` | 노트 수정 |
-| `GET` | `/api/v1/search?q=` | 전문 검색 |
-| `GET` | `/api/v1/graph/notes` | 노트 그래프 |
-| `GET` | `/api/v1/digest?hours=24` | 에이전트 활동 피드 |
-| `POST` | `/api/v1/notes/{id}/request-enrich` | AI 처리 요청 |
-| `GET` | `/api/v1/notes/enrichment/pending` | 처리 대기 목록 |
-| `POST` | `/api/v1/notes/{id}/enrichment` | AI 처리 결과 제출 |
+| Variable | Target | Description |
+|----------|--------|-------------|
+| `VITE_API_URL` | frontend | Backend URL (default: `http://localhost:8000`) |
+| `TURSO_URL` | backend | Turso cloud DB URL (optional) |
+| `TURSO_AUTH_TOKEN` | backend | Turso auth token (optional) |
+| `SQLITE_PATH` | backend | SQLite path (default: `./mnemo.db`) |
+| `LORIEN_DB_PATH` | backend | lorien knowledge graph DB path |
 
 ---
 
-## 환경 변수
-
-| 변수 | 대상 | 설명 |
-|------|------|------|
-| `VITE_API_URL` | frontend | 백엔드 URL (기본: `http://localhost:8000`) |
-| `TURSO_URL` | backend | Turso DB URL (없으면 SQLite fallback) |
-| `TURSO_AUTH_TOKEN` | backend | Turso 인증 토큰 |
-| `SQLITE_PATH` | backend | SQLite 경로 (기본: `./mnemo.db`) |
-| `LORIEN_DB_PATH` | backend | lorien DB 경로 |
-
----
-
-## 아키텍처
+## Architecture
 
 ```
-Browser (Vite + React)
-  ├── NotesSidebar  — 노트 목록, 태그 필터, 검색
-  ├── NoteEditor    — Notion 스타일 TipTap 에디터
-  └── UnifiedPanel  — Ego-graph + 링크 + 엔티티
+Browser (Vite + React + TipTap)
+  ├── NotesSidebar      category-grouped, collapsible, resizable
+  ├── NoteEditor        Notion-style, Cmd+S, ✨ AI button
+  ├── GraphView         Obsidian-style vis-network, barnesHut clustering
+  └── UnifiedPanel      ego-graph + links + calendar + heatmap, hideable
 
-FastAPI Backend
-  ├── /api/v1/notes       — CRUD
-  ├── /api/v1/search      — FTS5 전문 검색
-  ├── /api/v1/graph       — 노트-to-노트 그래프
-  ├── /api/v1/digest      — 24h 활동 피드
-  ├── /api/v1/links       — 양방향 링크 관리
-  └── /api/v1/enrichment  — AI 처리 job queue
+FastAPI Backend (localhost:8000)
+  ├── /api/v1/notes         CRUD + FTS5 search
+  ├── /api/v1/graph         note-to-note graph (shared tags)
+  ├── /api/v1/digest        24h agent activity feed
+  ├── /api/v1/links         bidirectional backlinks
+  ├── /api/v1/categories    dynamic category management
+  └── /api/v1/enrichment    AI job queue (no LLM in backend)
 
 Storage
-  ├── Turso (libSQL cloud) — production
-  └── SQLite              — local dev
+  ├── SQLite  local dev (default)
+  └── Turso   cloud production (optional)
+
+Knowledge Graph
+  └── lorien  local-first graph DB (entities, facts, relations)
 ```
 
 ---
 
-## Vercel 배포
+## UI Features
 
-```bash
-vercel --prod --yes
-```
-
-환경변수 (Vercel Dashboard):
-- `TURSO_URL`, `TURSO_AUTH_TOKEN`
-- `VITE_API_URL=https://mnemo-red.vercel.app`
+- **3-panel layout**: sidebar / editor / knowledge panel — all resizable
+- **Split view**: editor + full graph side-by-side (draggable divider)
+- **Graph modes**: node-only, graph-only, split
+- **Bidirectional sync**: graph node click → opens note; note change → graph focuses node
+- **Dynamic categories**: add/remove from editor; auto-discovered from `cat:` tags
+- **Mini calendar**: note activity by date in right panel
+- **Activity heatmap**: 7-week GitHub-style contribution view
 
 ---
 
-## 관련 프로젝트
+## Related
 
-- [lorien](https://github.com/paperbags1103-hash/lorien) — AI 에이전트용 지식 그래프 백엔드
+- [lorien](https://github.com/paperbags1103-hash/lorien) — AI agent knowledge graph backend
