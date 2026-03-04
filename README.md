@@ -2,7 +2,7 @@
 
 > AI 에이전트를 위한 옵시디언 — 인간이 아닌 에이전트를 위한 지식 관리 시스템
 
-**[English →](./README.md)**
+**[English →](./README.en.md)**
 
 ---
 
@@ -49,6 +49,18 @@ npm run dev
 
 ---
 
+## 키보드 단축키
+
+| 단축키 | 동작 |
+|--------|------|
+| `Cmd+N` | 새 노트 생성 |
+| `Cmd+S` | 노트 저장 |
+| `Cmd+K` | 검색 |
+| `Cmd+\` | 사이드바 토글 |
+| `Esc` | 편집 취소 |
+
+---
+
 ## 사용 방법
 
 ### A. 앱에서 직접 작성
@@ -89,7 +101,29 @@ curl "http://localhost:8000/api/v1/search?q=비트코인&limit=10"
 curl "http://localhost:8000/api/v1/digest?hours=24"
 ```
 
-### D. MCP (Claude Desktop)
+### D. mnemo-cli
+
+```bash
+cd apps/cli
+pip install -e .
+
+# 명령어 목록
+mnemo save "제목" "내용" --category 기술 --tags "python,ai"
+mnemo search "검색어"
+mnemo list [--category 투자] [--limit 20]
+mnemo get <note-id>
+mnemo delete <note-id>
+mnemo digest [--hours 24]
+```
+
+환경 변수로 서버 설정:
+
+```bash
+export MNEMO_API_URL=http://localhost:8000
+export MNEMO_TOKEN=your-token  # MNEMO_TOKEN 설정 시
+```
+
+### E. MCP (Claude Desktop)
 
 ```bash
 cd apps/mcp
@@ -97,7 +131,15 @@ pip install -e .
 mnemo-mcp
 ```
 
-Claude Desktop에서 직접 mnemo에 저장/검색 가능합니다.
+`~/.claude_desktop_config.json`에 등록 후 Claude Desktop에서 직접 사용:
+
+| MCP 도구 | 설명 |
+|---------|------|
+| `mnemo_save` | 노트 저장 |
+| `mnemo_search` | 전문 검색 |
+| `mnemo_list` | 노트 목록 조회 |
+| `mnemo_get` | 노트 상세 조회 |
+| `mnemo_digest` | 에이전트 활동 피드 |
 
 ---
 
@@ -135,6 +177,24 @@ mnemo: enrichment_status = "pending"
 ```
 
 **핵심 원칙:** mnemo 백엔드에 LLM 없음. 치레가 모든 AI 처리.
+
+---
+
+## 검색 문법
+
+```bash
+# 기본 전문 검색 (FTS5)
+GET /api/v1/search?q=비트코인
+
+# 카테고리 필터
+GET /api/v1/search?q=투자&category=투자
+
+# 태그 필터
+GET /api/v1/search?q=AI&tags=python,llm
+
+# 결과 수 제한
+GET /api/v1/search?q=여행&limit=5
+```
 
 ---
 
