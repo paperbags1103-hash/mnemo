@@ -181,7 +181,7 @@ export function GraphView({ compact = false }: { compact?: boolean }) {
         </header>
       )}
 
-      <main className="flex min-h-0 flex-1 bg-[#ffffff]">
+      <main className="flex min-h-0 flex-1 overflow-hidden bg-[#ffffff]">
         <section className="relative min-w-0 flex-1 overflow-hidden">
           {isLoading ? (
             <div className="flex h-full items-center justify-center gap-2 text-sm text-[#9b9b9b]">
