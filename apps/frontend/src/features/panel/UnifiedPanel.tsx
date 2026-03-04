@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Loader2, PanelRightClose } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Loader2, PanelRightClose } from "lucide-react";
 import { api } from "@/lib/api";
 import { useNotesStore } from "@/features/notes/store";
 import { useNotesList } from "@/features/notes/hooks/useNotes";
@@ -131,6 +131,76 @@ function usePendingLinks(noteId: string | null) {
 }
 
 // ── Main ───────────────────────────────────────────────
+// ── Mini Calendar ──────────────────────────────────────
+function MiniCalendar() {
+  const { data: notes = [] } = useNotesList();
+  const [cursor, setCursor] = useState(() => new Date());
+
+  const year = cursor.getFullYear();
+  const month = cursor.getMonth();
+
+  // Dates with notes this month
+  const noteDates = useMemo(() => {
+    const set = new Set<number>();
+    notes.forEach(n => {
+      const d = new Date(n.created_at ?? n.updated_at);
+      if (d.getFullYear() === year && d.getMonth() === month) set.add(d.getDate());
+    });
+    return set;
+  }, [notes, year, month]);
+
+  const firstDow = new Date(year, month, 1).getDay(); // 0=Sun
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const today = new Date();
+  const todayKey = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
+
+  const monthLabel = new Date(year, month).toLocaleDateString("ko", { year: "numeric", month: "long" });
+
+  return (
+    <div className="px-3 py-3">
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-[#ababaa]">캘린더</p>
+        <div className="flex items-center gap-0.5">
+          <button onClick={() => setCursor(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))}
+            className="rounded p-0.5 text-[#ababaa] hover:text-[#1a1a1a] transition-colors">
+            <ChevronLeft size={12} />
+          </button>
+          <span className="min-w-[80px] text-center text-[10px] text-[#6b6b69]">{monthLabel}</span>
+          <button onClick={() => setCursor(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))}
+            className="rounded p-0.5 text-[#ababaa] hover:text-[#1a1a1a] transition-colors">
+            <ChevronRight size={10} />
+          </button>
+        </div>
+      </div>
+      {/* Day headers */}
+      <div className="mb-1 grid grid-cols-7 gap-[2px]">
+        {["일","월","화","수","목","금","토"].map(d => (
+          <div key={d} className="text-center text-[8px] font-medium text-[#ababaa]">{d}</div>
+        ))}
+      </div>
+      {/* Date grid */}
+      <div className="grid grid-cols-7 gap-[2px]">
+        {Array.from({ length: firstDow }).map((_, i) => <div key={`e${i}`} />)}
+        {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => {
+          const isToday = `${year}-${month}-${d}` === todayKey;
+          const hasNote = noteDates.has(d);
+          return (
+            <div key={d} className="relative flex flex-col items-center">
+              <span className={`flex h-[18px] w-[18px] items-center justify-center rounded-full text-[9px] transition-colors
+                ${isToday ? "bg-[#1a1a1a] font-bold text-white" : "text-[#6b6b69] hover:bg-[#efefed]"}`}>
+                {d}
+              </span>
+              {hasNote && (
+                <span className="absolute bottom-0 h-[3px] w-[3px] rounded-full bg-[#2563eb]" />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Activity heatmap (last 7 weeks) ────────────────────
 function ActivityHeatmap() {
   const { data: notes = [] } = useNotesList();
@@ -295,6 +365,11 @@ export function UnifiedPanel({ noteId, onHide }: { noteId: string | null; onHide
           ))}
         </Section>
       )}
+
+      {/* Mini calendar */}
+      <div className="border-t border-[#ebebea]">
+        <MiniCalendar />
+      </div>
 
       {/* Activity heatmap */}
       <div className="border-t border-[#ebebea]">
