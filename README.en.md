@@ -47,8 +47,10 @@ cp .env.example .env          # edit if needed
 npm install --legacy-peer-deps
 
 cd apps/frontend
-npm run dev
+VITE_API_URL=http://localhost:8000 npm run dev
 ```
+
+> **Note:** `VITE_API_URL` is required. Without it, API requests will fail.
 
 - Frontend: http://localhost:5173
 - Backend API: http://localhost:8000

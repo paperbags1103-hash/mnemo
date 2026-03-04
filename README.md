@@ -42,10 +42,12 @@ cp .env.example .env   # 필요 시 편집
 npm install --legacy-peer-deps
 
 cd apps/frontend
-npm run dev
+VITE_API_URL=http://localhost:8000 npm run dev
 ```
 
-- 프론트엔드: http://localhost:5173
+> **참고:** `VITE_API_URL`을 반드시 지정하세요. 생략하면 API 요청이 실패합니다.
+
+- 프론트엔드: http://localhost:5173 (포트 사용 중이면 5174, 5175 순서로 자동 할당)
 - 백엔드 API: http://localhost:8000
 - API 문서: http://localhost:8000/docs
 
