@@ -107,8 +107,13 @@ function NotesScreen({ onCreateNote }: { onCreateNote: () => Promise<void> }) {
               </div>
               <ResizeHandle onMouseDown={splitResize.onMouseDown} />
               {/* Graph pane */}
-              <div className="min-w-0 flex-1 overflow-hidden">
-                <GraphView />
+              <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+                <div className="flex h-9 items-center border-b border-[#e9e9e7] bg-[#fafafa] px-3">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-[#ababaa]">Knowledge Graph</span>
+                </div>
+                <div className="min-h-0 flex-1">
+                  <GraphView compact />
+                </div>
               </div>
             </div>
           )}

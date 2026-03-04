@@ -55,7 +55,7 @@ function loadVisNetwork() {
   return visNetworkPromise;
 }
 
-export function GraphView() {
+export function GraphView({ compact = false }: { compact?: boolean }) {
   const { data, isLoading, isError } = useKnowledgeGraph();
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [networkError, setNetworkError] = useState<string | null>(null);
@@ -166,18 +166,20 @@ export function GraphView() {
 
   return (
     <>
-      <header className="flex h-14 items-center justify-between border-b border-[#e9e9e7] bg-[#ffffff] px-6">
-        <div>
-          <h1 className="text-lg font-bold tracking-[0.08em] text-[#1a1a1a]">Knowledge Graph</h1>
-          <p className="text-xs uppercase tracking-[0.18em] text-[#9b9b9b]">
-            Note links by shared tags
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <StatChip label="Notes" value={data?.nodes.length ?? 0} />
-          <StatChip label="Links" value={data?.edges.length ?? 0} />
-        </div>
-      </header>
+      {!compact && (
+        <header className="flex h-14 items-center justify-between border-b border-[#e9e9e7] bg-[#ffffff] px-6">
+          <div>
+            <h1 className="text-lg font-bold tracking-[0.08em] text-[#1a1a1a]">Knowledge Graph</h1>
+            <p className="text-xs uppercase tracking-[0.18em] text-[#9b9b9b]">
+              Note links by shared tags
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <StatChip label="Notes" value={data?.nodes.length ?? 0} />
+            <StatChip label="Links" value={data?.edges.length ?? 0} />
+          </div>
+        </header>
+      )}
 
       <main className="flex min-h-0 flex-1 bg-[#ffffff]">
         <section className="relative min-w-0 flex-1 overflow-hidden">
@@ -204,7 +206,7 @@ export function GraphView() {
           )}
         </section>
 
-        <aside className="flex h-full w-[320px] flex-col border-l border-[#e9e9e7] bg-[#f7f7f5]">
+        {!compact && <aside className="flex h-full w-[320px] flex-col border-l border-[#e9e9e7] bg-[#f7f7f5]">
           <div className="border-b border-[#e9e9e7] px-4 py-3">
             <p className="text-[11px] uppercase tracking-[0.28em] text-[#9b9b9b]">Note Details</p>
           </div>
@@ -270,7 +272,7 @@ export function GraphView() {
               <p className="text-sm text-[#9b9b9b]">Select a node to inspect its details.</p>
             )}
           </div>
-        </aside>
+        </aside>}
       </main>
     </>
   );
