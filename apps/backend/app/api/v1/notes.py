@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from app.core.auth import verify_api_key
 from app.core.db import db
+from app.core.md_to_html import md_to_html
 from app.models.note import NoteCreate, NoteRead, NoteUpdate, apply_category_tag, extract_category
 
 router = APIRouter(prefix="/notes", tags=["notes"], dependencies=[Depends(verify_api_key)])
@@ -15,7 +16,7 @@ def normalize_create_payload(payload: NoteCreate) -> NoteCreate:
     category = payload.category if payload.category is not None else extract_category(payload.tags)
     return NoteCreate(
         title=payload.title,
-        content=payload.content,
+        content=md_to_html(payload.content),
         folder_id=payload.folder_id,
         tags=apply_category_tag(payload.tags, category),
         category=category,

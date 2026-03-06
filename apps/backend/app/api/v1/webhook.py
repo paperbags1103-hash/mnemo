@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from app.core.auth import verify_api_key
 from app.core.db import db
+from app.core.md_to_html import md_to_html
 from app.models.note import DEFAULT_CATEGORY, NoteCreate, NoteRead, apply_category_tag
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"], dependencies=[Depends(verify_api_key)])
@@ -28,6 +29,7 @@ async def webhook_save(payload: WebhookPayload) -> NoteRead:
     content = payload.content
     if payload.source:
         content = f"**Source:** {payload.source}\n\n{content}"
+    content = md_to_html(content)
 
     tags = apply_category_tag(payload.tags, payload.category)
 
