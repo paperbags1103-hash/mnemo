@@ -128,6 +128,29 @@ class DatabaseManager:
             await connection.commit()
 
     async def list_notes(self) -> list[NoteRead]:
+        if settings.turso_url:
+            try:
+                async with create_client(settings.turso_url, auth_token=settings.turso_auth_token) as client:
+                    rs = await client.execute(
+                        "SELECT id, title, content, folder_id, tags, created_at, updated_at, version, source_ref FROM note ORDER BY datetime(updated_at) DESC"
+                    )
+                    results = []
+                    for row in rs.rows:
+                        col = {rs.columns[i].name: row[i] for i in range(len(rs.columns))}
+                        results.append(NoteRead(
+                            id=UUID(col["id"]),
+                            title=col["title"] or "",
+                            content=col["content"] or "",
+                            folder_id=col.get("folder_id"),
+                            tags=json.loads(col.get("tags") or "[]"),
+                            created_at=datetime.fromisoformat(col["created_at"]),
+                            updated_at=datetime.fromisoformat(col["updated_at"]),
+                            version=col.get("version") or 1,
+                            source_ref=col.get("source_ref"),
+                        ))
+                    return results
+            except Exception:
+                pass
         async with aiosqlite.connect(self.sqlite_path) as connection:
             connection.row_factory = aiosqlite.Row
             cursor = await connection.execute(
@@ -266,9 +289,18 @@ class DatabaseManager:
         return current
 
     async def delete_note(self, note_id: UUID | str) -> bool:
+        nid = str(note_id)
+        if settings.turso_url:
+            try:
+                async with create_client(settings.turso_url, auth_token=settings.turso_auth_token) as client:
+                    rs = await client.execute("DELETE FROM note WHERE id = ?", [nid])
+                    await client.execute("DELETE FROM note_fts WHERE id = ?", [nid])
+                    return (rs.rows_affected or 0) > 0
+            except Exception:
+                pass
         async with aiosqlite.connect(self.sqlite_path) as connection:
-            cursor = await connection.execute("DELETE FROM note WHERE id = ?", (str(note_id),))
-            await connection.execute("DELETE FROM note_fts WHERE id = ?", (str(note_id),))
+            cursor = await connection.execute("DELETE FROM note WHERE id = ?", (nid,))
+            await connection.execute("DELETE FROM note_fts WHERE id = ?", (nid,))
             await connection.commit()
             return cursor.rowcount > 0
 
